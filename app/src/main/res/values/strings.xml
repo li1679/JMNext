@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">JMNext</string>
+    <string name="launcher_disguise_default">JMNext</string>
+    <string name="launcher_disguise_system_tools">系统工具</string>
+    <string name="launcher_disguise_gallery">相册</string>
+</resources>

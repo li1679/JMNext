@@ -4,4 +4,14 @@
     <style name="Theme.Jmmobile" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/launch_background</item>
     </style>
+
+    <!-- 启动窗口按应用自己的主题设置选取，避免冷启动闪白。
+         由 MainActivity 在 super.onCreate() 之前 setTheme。 -->
+    <style name="Theme.Jmmobile.Light" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/launch_background_light</item>
+    </style>
+
+    <style name="Theme.Jmmobile.Dark" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/launch_background_dark</item>
+    </style>
 </resources>

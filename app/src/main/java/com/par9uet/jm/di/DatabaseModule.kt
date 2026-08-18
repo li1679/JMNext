@@ -30,7 +30,7 @@ val databaseModule = module {
     viewModel { DownloadViewModel(get(), get()) }
     viewModel { DownloadComicDetailViewModel(get()) }
 
-    worker { DownloadComicWorker(get(), get(), get(), get(), get(), get(), get()) }
+    worker { DownloadComicWorker(get(), get(), get(), get(), get(), get(), get(), get()) }
 }
 
 private val MIGRATION_2_3 = object : Migration(2, 3) {

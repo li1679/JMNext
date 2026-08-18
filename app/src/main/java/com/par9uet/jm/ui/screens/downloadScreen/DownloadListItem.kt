@@ -192,7 +192,7 @@ fun DownloadRowItem(
                     text = if (group.chapterCount > 1) {
                         "共 ${group.chapterCount} 章"
                     } else {
-                        group.authorList.joinToString(",").ifBlank { "暂无作者信息" }
+                        group.authorList.joinToString(",").ifBlank { "暂无作者" }
                     },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

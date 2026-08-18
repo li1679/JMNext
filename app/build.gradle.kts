@@ -60,7 +60,7 @@ android {
         applicationId = "com.jmnext.reader"
         // Android 6.0 Marshmallow is API 23.
         minSdk = 23
-        targetSdk = 35
+        targetSdk = 36
         versionCode = versionCodeProp
         versionName = versionNameProp
 
@@ -88,6 +88,9 @@ android {
     }
     buildFeatures {
         compose = true
+        // 为了能在代码里按 BuildConfig.DEBUG 区分构建类型
+        // （release 下关掉 logcat 输出与 HTTP 日志拦截器）
+        buildConfig = true
     }
     packaging {
         resources {
@@ -111,6 +114,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.material.kolor)
     implementation(libs.androidx.navigation.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.okhttp)
@@ -137,10 +141,5 @@ dependencies {
     }
     implementation(libs.jmcomic.android.support)
     testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
 }

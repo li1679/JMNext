@@ -1,5 +1,6 @@
 package com.par9uet.jm.retrofit
 
+import com.par9uet.jm.BuildConfig
 import com.par9uet.jm.retrofit.converter.PrimitiveToRequestBodyConverterFactory
 import com.par9uet.jm.retrofit.converter.ResponseConverterFactory
 import com.par9uet.jm.retrofit.interceptor.BaseUrlInterceptor
@@ -69,9 +70,15 @@ class Retrofit(
             // 放在 baseUrlInterceptor 内层：每次换线路重试都会重算签名，
             // 保证时间戳始终新鲜
             .addInterceptor(tokenInterceptor)
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BASIC
-            })
+            .apply {
+                // HTTP 日志只在 debug 构建挂载：release 下它既是无谓开销，
+                // 也会把完整请求 URL 打进 logcat
+                if (BuildConfig.DEBUG) {
+                    addInterceptor(HttpLoggingInterceptor().apply {
+                        level = HttpLoggingInterceptor.Level.BASIC
+                    })
+                }
+            }
             .cookieJar(cookieJar)
             .applyTlsCompat()
             .build()

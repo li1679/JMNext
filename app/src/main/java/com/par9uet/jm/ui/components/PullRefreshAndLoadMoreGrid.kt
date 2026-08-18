@@ -95,8 +95,9 @@ fun <T : Any> PullRefreshAndLoadMoreGrid(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    "\u6ca1\u6709\u66f4\u591a\u6570\u636e\u4e86",
-                                    style = MaterialTheme.typography.bodySmall
+                                    "\u6ca1\u6709\u66f4\u591a\u4e86",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }

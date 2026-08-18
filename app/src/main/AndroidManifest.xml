@@ -17,10 +17,11 @@
         android:usesCleartextTraffic="true"
         android:roundIcon="@mipmap/logo_round"
         android:supportsRtl="true"
+        android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.Jmmobile">
         <activity
             android:name=".MainActivity"
-            android:exported="true"
+            android:exported="false"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Jmmobile" />
 

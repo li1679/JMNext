@@ -6,49 +6,54 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.par9uet.jm.utils.shimmer
 
+/**
+ * 漫画卡片的骨架屏。
+ * 结构、圆角、行数需与 [Comic] 真实卡片一致，否则加载完成时布局会跳。
+ */
 @Composable
 fun ComicSkeleton(
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(0.75f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .shimmer()
-            )
-            Box(
-                modifier = Modifier
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .fillMaxWidth(0.8f) // 标题长度通常不到头
-                    .height(14.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .shimmer()
-            )
-            Box(
-                modifier = Modifier
-                    .padding(horizontal = 8.dp)
-                    .padding(bottom = 12.dp)
-                    .fillMaxWidth(0.5f) // 作者名通常更短
-                    .height(12.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .shimmer()
-            )
-        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(3f / 4f)
+                .clip(MaterialTheme.shapes.medium)
+                .shimmer()
+        )
+        // 标题占两行
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(14.dp)
+                .clip(MaterialTheme.shapes.extraSmall)
+                .shimmer()
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.7f)
+                .height(14.dp)
+                .clip(MaterialTheme.shapes.extraSmall)
+                .shimmer()
+        )
+        // 作者行更短
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.4f)
+                .height(11.dp)
+                .clip(MaterialTheme.shapes.extraSmall)
+                .shimmer()
+        )
     }
 }

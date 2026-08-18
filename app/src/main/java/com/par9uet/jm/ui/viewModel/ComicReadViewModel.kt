@@ -25,6 +25,7 @@ import com.par9uet.jm.store.ReadHistoryManager
 import com.par9uet.jm.store.ToastManager
 import com.par9uet.jm.ui.models.CommonUIState
 import com.par9uet.jm.utils.log
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -36,6 +37,12 @@ import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
 import kotlin.math.max
 import kotlin.math.min
+
+private const val DEFAULT_DECODE_CONCURRENCY = 2
+private const val MAX_DECODE_CONCURRENCY = 4
+
+/** 保留窗口在预解码范围之外额外多留的页数，避免在边界来回滚动时反复解码同一页 */
+private const val RETAIN_MARGIN = 2
 
 class ComicReadViewModel(
     private val comicRepository: ComicRepository,
@@ -62,20 +69,28 @@ class ComicReadViewModel(
 
     val size: Int get() = _comicPicState.value.data?.size ?: 0
 
-    private val prefetchSet = mutableSetOf<Int>()
-    // 内存优化模式下的并发解码信号量，按需创建
-    private var decodeSemaphore: Semaphore? = null
-    private var decodeSemaphorePermits: Int = 0
-    private fun getDecodeSemaphore(): Semaphore? {
-        val setting = localSettingManager.localSettingState.value
-        if (!setting.readMemoryOptEnabled) return null
-        val target = setting.readDecodeConcurrency.coerceAtLeast(1)
-        if (decodeSemaphore == null || decodeSemaphorePermits != target) {
+    /** 已解码或正在解码的页码 */
+    private val decodedIndices = mutableSetOf<Int>()
+
+    /** 进行中的解码任务，页面被移出保留窗口时据此取消 */
+    private val decodeJobs = mutableMapOf<Int, Job>()
+
+    // 信号量始终生效：并发解码若无上限，快速滚动时会同时展开数十张全尺寸位图
+    private var decodeSemaphore: Semaphore = Semaphore(DEFAULT_DECODE_CONCURRENCY)
+    private var decodeSemaphorePermits: Int = DEFAULT_DECODE_CONCURRENCY
+
+    private fun getDecodeSemaphore(): Semaphore {
+        val target = localSettingManager.localSettingState.value
+            .readDecodeConcurrency.coerceIn(1, MAX_DECODE_CONCURRENCY)
+        if (decodeSemaphorePermits != target) {
             decodeSemaphore = Semaphore(target)
             decodeSemaphorePermits = target
         }
         return decodeSemaphore
     }
+
+    private fun prefetchCount(): Int =
+        localSettingManager.localSettingState.value.prefetchCount.coerceAtLeast(0)
 
     fun getComicDetail(comicId: Int) {
         viewModelScope.launch {
@@ -157,7 +172,7 @@ class ComicReadViewModel(
                     errorMsg = ""
                 )
             }
-            prefetchSet.clear()
+            releaseAll()
             when (val data = comicRepository.getComicPicList(comicId, shunt)) {
                 is NetWorkResult.Error -> {
                     _comicPicState.update {
@@ -207,7 +222,7 @@ class ComicReadViewModel(
                     errorMsg = ""
                 )
             }
-            prefetchSet.clear()
+            releaseAll()
             val downloadComic = downloadComicDao.getById(comicId)
             val groupId = downloadComic?.groupId?.takeIf { it != 0 } ?: comicId
             readHistoryComicId.intValue = readHistoryManager.markRead(groupId, comicId)
@@ -308,30 +323,56 @@ class ComicReadViewModel(
 
     fun decodeIndex(index: Int, context: Context) {
         if (size <= 0 || index !in 0 until size) return
-        log("decode index $index")
-        val count = localSettingManager.localSettingState.value.prefetchCount
+        val count = prefetchCount()
         val start = max(0, index - count)
         val end = min(size - 1, index + count)
+        retainOnly(start, end)
         decode(index, context) {
-            for (i in index + 1..end) {
-                log("pre decode index $i")
-                decode(i, context)
-            }
-            for (i in index - 1 downTo start) {
-                log("pre decode index $i")
-                decode(i, context)
-            }
+            for (i in index + 1..end) decode(i, context)
+            for (i in index - 1 downTo start) decode(i, context)
         }
     }
 
     fun decodeVisibleRange(firstIndex: Int, lastIndex: Int, context: Context) {
         if (size <= 0) return
-        val count = localSettingManager.localSettingState.value.prefetchCount
+        val count = prefetchCount()
         val start = max(0, min(firstIndex, lastIndex) - count)
         val end = min(size - 1, max(firstIndex, lastIndex) + count)
+        retainOnly(start, end)
         for (i in start..end) {
             decode(i, context)
         }
+    }
+
+    /**
+     * 只保留 [start]..[end]（两端各外扩 [RETAIN_MARGIN] 页）范围内已解码的页，其余释放。
+     *
+     * 记录「解码过」的集合必须能逐出：ImageResultState.Success 持有全尺寸位图，
+     * 只增不减会让一次阅读会话翻过的每一页都常驻内存。
+     */
+    private fun retainOnly(start: Int, end: Int) {
+        val keepStart = start - RETAIN_MARGIN
+        val keepEnd = end + RETAIN_MARGIN
+        val data = _comicPicState.value.data ?: return
+        val iterator = decodedIndices.iterator()
+        while (iterator.hasNext()) {
+            val i = iterator.next()
+            if (i in keepStart..keepEnd) continue
+            decodeJobs.remove(i)?.cancel()
+            data.getOrNull(i)?.release()
+            iterator.remove()
+        }
+    }
+
+    /** 释放全部已解码页，用于切换章节与 ViewModel 销毁 */
+    private fun releaseAll() {
+        // 必须先取快照并清空 map 再逐个 cancel：cancel() 可能同步触发
+        // invokeOnCompletion 回调去 remove 同一个 map，边遍历边改会抛 CME
+        val jobs = decodeJobs.values.toList()
+        decodeJobs.clear()
+        jobs.forEach { it.cancel() }
+        _comicPicState.value.data?.forEach { it.release() }
+        decodedIndices.clear()
     }
 
     fun prev(context: Context) {
@@ -352,28 +393,29 @@ class ComicReadViewModel(
 
     private fun decode(index: Int, context: Context, onComplete: (() -> Unit)? = null) {
         val comicPicImageState = comicPicState.value.data?.getOrNull(index) ?: return
-        if (prefetchSet.contains(index)) {
+        // add 返回 false 说明这一页已经解码过或正在解码中
+        if (!decodedIndices.add(index)) {
             onComplete?.invoke()
             return
         }
-        val setting = localSettingManager.localSettingState.value
-        val downscale = setting.readMemoryOptEnabled
         val semaphore = getDecodeSemaphore()
-        viewModelScope.launch {
+        val job = viewModelScope.launch {
             try {
-                if (semaphore != null) {
-                    semaphore.withPermit {
-                        comicPicImageState.decode(context, downscale = downscale)
-                    }
-                } else {
-                    comicPicImageState.decode(context, downscale = false)
+                semaphore.withPermit {
+                    comicPicImageState.decode(context)
                 }
             } catch (e: Exception) {
                 log("decode index $index failed: ${e.message}")
             }
             onComplete?.invoke()
         }
-        prefetchSet.add(index)
+        decodeJobs[index] = job
+        job.invokeOnCompletion { decodeJobs.remove(index) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        releaseAll()
     }
 
     fun triggerToolBar() {

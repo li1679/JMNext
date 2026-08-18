@@ -81,9 +81,6 @@ class LocalSettingManager(
     fun updateShowComicCacheNotificationName(show: Boolean) =
         updateSetting { it.copy(showComicCacheNotificationName = show) }
 
-    fun updateShowAiEntry(show: Boolean) =
-        updateSetting { it.copy(showAiEntry = show) }
-
     fun addBlockedTag(tag: String) {
         val normalizedTag = normalizeBlockedTag(tag)
         if (normalizedTag.isBlank()) return
@@ -188,9 +185,6 @@ class LocalSettingManager(
 
     fun updateHomeExcludedTags(tags: List<String>) =
         updateSetting { it.copy(homeExcludedTags = tags) }
-
-    fun updateReadMemoryOptEnabled(enabled: Boolean) =
-        updateSetting { it.copy(readMemoryOptEnabled = enabled) }
 
     fun updateReadDecodeConcurrency(concurrency: Int) =
         updateSetting { it.copy(readDecodeConcurrency = concurrency.coerceIn(1, 4)) }

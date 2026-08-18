@@ -1,6 +1,7 @@
 package com.par9uet.jm
 
 import android.app.Application
+import com.par9uet.jm.cache.trimPicDecodeCache
 import com.par9uet.jm.di.appModule
 import com.par9uet.jm.di.coilModule
 import com.par9uet.jm.di.comicModule
@@ -8,6 +9,9 @@ import com.par9uet.jm.di.databaseModule
 import com.par9uet.jm.di.retrofitModule
 import com.par9uet.jm.di.userModule
 import com.par9uet.jm.utils.ensureAppNotificationChannels
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
@@ -30,6 +34,12 @@ class JmApplication : Application() {
             androidContext(this@JmApplication)
             workManagerFactory()
             modules(moduleList)
+        }
+
+        // 解码缓存没有上限也没有自动清理，长期使用会无限增长。
+        // 放在后台做，不阻塞启动。
+        CoroutineScope(Dispatchers.IO).launch {
+            trimPicDecodeCache(this@JmApplication)
         }
     }
 }

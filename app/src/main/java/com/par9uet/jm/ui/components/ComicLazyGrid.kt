@@ -54,26 +54,35 @@ fun ComicLazyGrid(
     val visibleList = remember(list, localSetting.blockedTagList) {
         list.filterBlockedTags(localSetting.blockedTagList)
     }
-    val shouldLoadMore =
-        remember(
-            gridState.layoutInfo.visibleItemsInfo,
-            gridState.layoutInfo.totalItemsCount,
-            isRefreshing,
-            hasMore
-        ) {
-            derivedStateOf {
-                val layoutInfo = gridState.layoutInfo
-                val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-                lastVisibleItem?.index == layoutInfo.totalItemsCount - 1 &&
-                        !isRefreshing &&
-                        hasMore
-            }
+
+    // layoutInfo 必须只在 derivedStateOf 的 lambda 内部读取。
+    // 若作为 remember 的 key 在组合期读取，滚动每帧都会重组整个网格，
+    // 且 visibleItemsInfo 每帧是新对象，会让 derivedStateOf 反复重建而失效。
+    // 同理 LaunchedEffect 的 key 要用值而非 State 对象，否则会重复触发 onLoadMore。
+    val shouldLoadMore by remember(gridState) {
+        derivedStateOf {
+            val layoutInfo = gridState.layoutInfo
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()
+                ?: return@derivedStateOf false
+            lastVisible.index >= layoutInfo.totalItemsCount - 1
         }
-    LaunchedEffect(shouldLoadMore) {
-        if (shouldLoadMore.value) {
+    }
+
+    LaunchedEffect(shouldLoadMore, isRefreshing, hasMore, list.size) {
+        if (shouldLoadMore && !isRefreshing && hasMore) {
             onLoadMore()
         }
     }
+
+    // 整页内容都被标签排除时列表无可见项，也就没有「滚到底」事件可触发下一页，
+    // 界面会永久停在空白状态。key 里带 list.size：只有真拿到新数据才会再次尝试，
+    // 服务端不再返回新内容时自然停止。
+    LaunchedEffect(list.size, visibleList.isEmpty(), hasMore, isRefreshing) {
+        if (visibleList.isEmpty() && list.isNotEmpty() && hasMore && !isRefreshing) {
+            onLoadMore()
+        }
+    }
+
     PullToRefreshBox(
         isRefreshing = isRefreshing,
         state = pullToRefreshState,
@@ -104,13 +113,12 @@ fun ComicLazyGrid(
             ) { item ->
                 Comic(item)
             }
-            if (visibleList.isNotEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    LoadMore(
-                        isLoading = isMoreLoading,
-                        hasMore = hasMore
-                    )
-                }
+            // visibleList 为空时也要保留：它是「滚到底」判定依赖的最后一项
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LoadMore(
+                    isLoading = isMoreLoading,
+                    hasMore = hasMore
+                )
             }
         }
     }

@@ -12,10 +12,15 @@ import javax.crypto.spec.SecretKeySpec
 // TODO 改为 koin 注入，改为类，并实现 koinComponent
 private val g: Gson = Gson().newBuilder().setStrictness(Strictness.LENIENT).create()
 
+// 正则置于顶层：这些函数在每次拉取图片列表时都会调用，避免重复编译
+private val RESULT_REGEX = Regex("""const result\s*=\s*(\{[\s\S]*?\});""")
+private val CONFIG_REGEX = Regex("""const config\s*=\s*(\{[\s\S]*?\});""")
+private val AID_REGEX = Regex("""var aid\s*=\s*(\d+);""")
+private val SCRAMBLE_ID_REGEX = Regex("""var scramble_id\s*=\s*(\d+);""")
+private val SPEED_REGEX = Regex("""var speed\s*=\s*'(.*)';""")
+
 fun parseHtml(htmlStr: String): List<String> {
-    // 正则表达式匹配 result 对象
-    val resultRegex = Regex("""const result\s*=\s*(\{[\s\S]*?\});""")
-    val resultMatch = resultRegex.find(htmlStr)
+    val resultMatch = RESULT_REGEX.find(htmlStr)
     val originPicList = mutableListOf<String>()
 
     if (resultMatch != null) {
@@ -40,9 +45,7 @@ fun parseHtml(htmlStr: String): List<String> {
         }
     }
 
-    // 正则表达式匹配 config 对象
-    val configRegex = Regex("""const config\s*=\s*(\{[\s\S]*?\});""")
-    val configMatch = configRegex.find(htmlStr)
+    val configMatch = CONFIG_REGEX.find(htmlStr)
     var imgHost: String? = null
     var jmId: String? = null
     var cache: String? = null
@@ -77,8 +80,7 @@ fun parseRange(htmlStr: String): Pair<Int, Int> {
     // scramble_id 若退化成 0，所有老本子都会被判定为「需要解扰」而出现错版，
     // 因此解析不到时回退到禁漫的默认值而非 0
     var right = DEFAULT_SCRAMBLE_ID
-    val r1 = Regex("""var aid\s*=\s*(\d+);""")
-    val rs1 = r1.find(htmlStr)
+    val rs1 = AID_REGEX.find(htmlStr)
     if (rs1 != null) {
         try {
             val str = rs1.groupValues[1]
@@ -88,8 +90,7 @@ fun parseRange(htmlStr: String): Pair<Int, Int> {
         }
     }
 
-    val r2 = Regex("""var scramble_id\s*=\s*(\d+);""")
-    val rs2 = r2.find(htmlStr)
+    val rs2 = SCRAMBLE_ID_REGEX.find(htmlStr)
     if (rs2 != null) {
         try {
             val str = rs2.groupValues[1]
@@ -105,8 +106,7 @@ fun parseRange(htmlStr: String): Pair<Int, Int> {
 
 fun parseSpeed(htmlStr: String): String {
     var speed = ""
-    val r1 = Regex("""var speed\s*=\s*'(.*)';""")
-    val rs1 = r1.find(htmlStr)
+    val rs1 = SPEED_REGEX.find(htmlStr)
     if (rs1 != null) {
         try {
             speed = rs1.groupValues[1]
@@ -121,11 +121,9 @@ fun decryptData(str: String): String {
     val decryptKey = ApiContext.getDataDecryptKey()
     val secretKey = SecretKeySpec(decryptKey.toByteArray(Charset.forName("UTF-8")), "AES")
 
-    // 配置 Cipher
     val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
     cipher.init(Cipher.DECRYPT_MODE, secretKey)
 
-    // 解密数据
     val encryptedBytes = android.util.Base64.decode(str, android.util.Base64.DEFAULT)
     val decryptedBytes = cipher.doFinal(encryptedBytes)
 

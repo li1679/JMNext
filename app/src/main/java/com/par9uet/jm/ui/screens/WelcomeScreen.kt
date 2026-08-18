@@ -180,19 +180,13 @@ fun WelcomeScreen(
                             secondaryText = "跳过",
                             onSecondary = { step = 6 }
                         )
-                        6 -> StepButtons(
-                            primaryText = "下一步",
-                            onPrimary = { step = 7 },
-                            secondaryText = "跳过",
-                            onSecondary = { step = 7 }
-                        )
-                        7 -> {
+                        6 -> {
                             if (isLogin) {
                                 StepButtons(
                                     primaryText = "下一步",
                                     onPrimary = {
                                         if (!preferenceStepHandled) {
-                                            step = 8
+                                            step = 7
                                         } else {
                                             skipOnboarding()
                                         }
@@ -213,11 +207,11 @@ fun WelcomeScreen(
                                 )
                             }
                         }
-                        8 -> StepButtons(
+                        7 -> StepButtons(
                             primaryText = "下一步",
-                            onPrimary = { step = 9 }
+                            onPrimary = { step = 8 }
                         )
-                        9 -> StepButtons(
+                        8 -> StepButtons(
                             primaryText = "完成",
                             onPrimary = {
                                 preferenceStepHandled = true
@@ -298,15 +292,11 @@ fun WelcomeScreen(
                         onShowPasswordDialog = { showPasswordDialog = true },
                         onShowPatternDialog = { showPatternDialog = true }
                     )
-                    5 -> AiStepContent(
-                        enabled = localSetting.showAiEntry,
-                        onToggle = { localSettingManager.updateShowAiEntry(it) }
-                    )
-                    6 -> ExtractCodeStepContent(
+                    5 -> ExtractCodeStepContent(
                         clipboardAutoDetectEnabled = localSetting.clipboardAutoDetectEnabled,
                         onToggleClipboard = { localSettingManager.updateClipboardAutoDetectEnabled(it) }
                     )
-                    7 -> LoginStepContent(
+                    6 -> LoginStepContent(
                         isLogin = isLogin,
                         loginState = loginState,
                         username = loginUsername,
@@ -314,11 +304,11 @@ fun WelcomeScreen(
                         onUsernameChange = { loginUsername = it.filter { ch -> ch.code in 0..127 } },
                         onPasswordChange = { loginPassword = it.filter { ch -> ch.code in 0..127 } }
                     )
-                    8 -> AutoSignInStepContent(
+                    7 -> AutoSignInStepContent(
                         enabled = localSetting.autoSignInEnabled,
                         onToggle = { localSettingManager.updateAutoSignInEnabled(it) }
                     )
-                    9 -> PreferenceRecommendStepContent(
+                    8 -> PreferenceRecommendStepContent(
                         enabled = localSetting.preferenceRecommendEnabled,
                         recommendSource = localSetting.recommendSource,
                         onToggle = { localSettingManager.updatePreferenceRecommendEnabled(it) },
@@ -617,27 +607,6 @@ private fun AppLockStepContent(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun AiStepContent(
-    enabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-) {
-    StepWithControlLayout(
-        icon = Icons.Rounded.AutoAwesome,
-        title = "AI 助手（可选）",
-        description = "启用后将在主界面显示 AI 入口。本应用使用的 AI 服务为 unlimitedai，无道德审查，可自由对话与联网搜索。请遵守当地法律法规，理性使用。"
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("启用 AI 入口", style = MaterialTheme.typography.bodyLarge)
-            Switch(checked = enabled, onCheckedChange = onToggle)
         }
     }
 }

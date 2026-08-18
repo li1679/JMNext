@@ -3,8 +3,6 @@ package com.par9uet.jm.ui.screens.tabScreen
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -14,14 +12,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.par9uet.jm.ui.screens.AiChatScreen
 import com.par9uet.jm.ui.screens.HomeScreen
 import com.par9uet.jm.ui.screens.LocalMainNavController
 import com.par9uet.jm.ui.screens.UserCollectComicScreen
@@ -42,25 +38,14 @@ fun TabScreen(
     val currentRoute = navBackStackEntry?.destination?.route
     val isLogin by userManager.isLoginState.collectAsState(false)
     val localSetting by localSettingManager.localSettingState.collectAsState()
-    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    LaunchedEffect(localSetting.showAiEntry, currentRoute) {
-        if (!localSetting.showAiEntry && currentRoute == "ai") {
-            tabNavController.navigate("home") {
-                popUpTo("ai") {
-                    inclusive = true
-                }
-            }
-        }
-    }
     CompositionLocalProvider(
         LocalTabNavController provides tabNavController,
     ) {
         BoxWithConstraints {
             val useNavigationRail = maxWidth >= 700.dp
-            val hideBottomNavigation = currentRoute == "ai" && imeVisible
             Scaffold(
                 bottomBar = {
-                    if (!useNavigationRail && !hideBottomNavigation) {
+                    if (!useNavigationRail) {
                         BottomNavigationBarComponent()
                     }
                 },
@@ -86,9 +71,6 @@ fun TabScreen(
                         }
                         composable("user") {
                             UserScreen()
-                        }
-                        composable("ai") {
-                            AiChatScreen()
                         }
                         composable("collect") {
                             LaunchedEffect(isLogin) {

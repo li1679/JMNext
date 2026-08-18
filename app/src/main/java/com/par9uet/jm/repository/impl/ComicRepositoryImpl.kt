@@ -55,7 +55,6 @@ import io.github.jukomu.jmcomic.core.net.OkHttpBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.Cookie
 import okhttp3.OkHttpClient
@@ -433,42 +432,6 @@ class ComicRepositoryImpl(
             }
         }
         return NetWorkResult.Error("网络API暂不支持收藏夹管理")
-    }
-
-    override suspend fun getComicIdsByTag(tagName: String, maxPages: Int): Set<Int> {
-        if (tagName.isBlank()) return emptySet()
-        return withContext(Dispatchers.IO) {
-            try {
-                val client = getEmbeddedClient()
-                val ids = mutableSetOf<Int>()
-                for (page in 1..maxPages.coerceAtLeast(1)) {
-                    val query = SearchQuery.Builder()
-                        .text(tagName)
-                        .mainTag(SearchMainTag.TAG)
-                        .page(page)
-                        .build()
-                    val result = try {
-                        client.search(query)
-                    } catch (e: Exception) {
-                        logError("ComicRepositoryImpl", "搜索标签 [$tagName] 第${page}页失败：${e.message}")
-                        break
-                    }
-                    val content = result.content().orEmpty()
-                    if (content.isEmpty()) break
-                    content.forEach { meta ->
-                        meta.id().toIntOrNull()?.let { ids += it }
-                    }
-                    val total = result.totalItems()
-                    if (total <= page * 20) break
-                    if (page < maxPages) delay(150)
-                }
-                log("ComicRepositoryImpl", "标签 [$tagName] 获取到 ${ids.size} 个漫画ID")
-                ids
-            } catch (e: Exception) {
-                logError("ComicRepositoryImpl", "获取标签 [$tagName] 漫画ID失败：${e.message}")
-                emptySet()
-            }
-        }
     }
 
     private fun useEmbeddedApi(): Boolean {

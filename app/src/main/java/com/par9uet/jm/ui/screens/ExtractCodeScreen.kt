@@ -207,7 +207,6 @@ fun ExtractCodeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // 左侧封面小窗口
                     AsyncImage(
                         model = "${remoteSetting.imgHost}/media/albums/${comic.id}_3x4.jpg",
                         imageLoader = imageLoader,
@@ -218,7 +217,6 @@ fun ExtractCodeScreen(
                             .height(128.dp)
                             .clip(RoundedCornerShape(8.dp))
                     )
-                    // 右侧信息
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(6.dp)

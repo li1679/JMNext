@@ -1,6 +1,7 @@
 package com.par9uet.jm.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,7 +79,8 @@ private val weekTextMap = mapOf(
     4 to "四",
     5 to "五",
     6 to "六",
-    7 to "七",
+    // 中文里周日写作「日」，不是「七」
+    7 to "日",
 )
 
 @Composable
@@ -168,7 +170,6 @@ fun SignInScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // 月份标题
                         val state = rememberCalendarState(
                             startMonth = startMonth,
                             endMonth = endMonth,
@@ -189,12 +190,13 @@ fun SignInScreen(
                             fontWeight = FontWeight.Medium,
                         )
 
-                        // 日历
                         HorizontalCalendar(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth(),
-                            state = rememberCalendarState(),
+                            // 必须复用上面配置好的 state（起止月份 / 首日 / OutDateStyle）：
+                            // 另建一个会让标题月份与实际渲染的月份脱节
+                            state = state,
                             calendarScrollPaged = true,
                             contentHeightMode = ContentHeightMode.Fill,
                             monthHeader = {
@@ -365,6 +367,7 @@ fun SignInScreen(
     }
 }
 
+/** 日历单元格：已签到整格填充、今天描边、对勾与星星作角标 */
 @Composable
 private fun Day(
     day: CalendarDay,
@@ -372,85 +375,64 @@ private fun Day(
     isSign: Boolean = false,
     hasExtraBonus: Boolean = false,
 ) {
-    val checkIcon = rememberVectorPainter(Icons.Default.Check)
-    val starIcon = rememberVectorPainter(Icons.Default.Star)
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val secondaryContainerColor = MaterialTheme.colorScheme.secondaryContainer
+    val container = when {
+        isToday -> MaterialTheme.colorScheme.primaryContainer
+        isSign -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val content = when {
+        isToday -> MaterialTheme.colorScheme.onPrimaryContainer
+        isSign -> MaterialTheme.colorScheme.onSecondaryContainer
+        day.position != DayPosition.MonthDate ->
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+
+        else -> MaterialTheme.colorScheme.onSurface
+    }
     Box(
-        Modifier
+        modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight()
             .padding(2.dp)
             .clip(MaterialTheme.shapes.medium)
-            .background(
-                color = when {
-                    isToday -> MaterialTheme.colorScheme.primaryContainer
-                    else -> MaterialTheme.colorScheme.surfaceContainer
-                },
-            ).let { modifier ->
-                if (isSign) {
-                    modifier.drawBehind {
-                        val side1 = size.minDimension * 0.5f
-                        val side2 = size.minDimension * 0.3f
-                        val path = Path().apply {
-                            moveTo(0f, 0f)
-                            lineTo(side1, 0f)
-                            lineTo(0f, side1)
-                            close()
-                        }
-                        drawPath(path = path, color = secondaryContainerColor)
-                        with(checkIcon) {
-                            draw(
-                                size = Size(side2, side2),
-                                colorFilter = ColorFilter.tint(primaryColor)
-                            )
-                        }
-                    }
+            .background(container)
+            .then(
+                if (isToday) {
+                    Modifier.border(
+                        width = 1.5.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = MaterialTheme.shapes.medium
+                    )
                 } else {
-                    modifier
-                }.let { modifier ->
-                    if (hasExtraBonus) {
-                        modifier.drawBehind {
-                            val side1 = size.minDimension * 0.5f
-                            val side2 = size.minDimension * 0.3f
-                            val path = Path().apply {
-                                moveTo(size.width, size.height)
-                                lineTo(size.width - side1, size.height)
-                                lineTo(size.width, size.height - side1)
-                                close()
-                            }
-                            drawPath(path = path, color = secondaryContainerColor)
-                            with(starIcon) {
-                                translate(
-                                    left = size.width - side2,
-                                    top = size.height - side2
-                                ) {
-                                    draw(
-                                        size = Size(side2, side2),
-                                        colorFilter = ColorFilter.tint(primaryColor)
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        modifier
-                    }
+                    Modifier
                 }
-            }
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = day.date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = when {
-                    day.position == DayPosition.OutDate -> MaterialTheme.colorScheme.onSurfaceVariant
-                    isToday -> MaterialTheme.colorScheme.onPrimaryContainer
-                    else -> Color.Unspecified
-                }
+        Text(
+            text = day.date.dayOfMonth.toString(),
+            style = MaterialTheme.typography.bodyMedium,
+            color = content
+        )
+        if (isSign) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "已签到",
+                tint = content,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(3.dp)
+                    .size(12.dp)
+            )
+        }
+        if (hasExtraBonus) {
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = "有额外奖励",
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(3.dp)
+                    .size(12.dp)
             )
         }
     }

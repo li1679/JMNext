@@ -18,6 +18,9 @@ private val cdnHeaderInterceptor = Interceptor { chain ->
     chain.proceed(request)
 }
 
+/** Coil 磁盘缓存上限 */
+private const val COIL_DISK_CACHE_BYTES = 256L * 1024 * 1024
+
 fun createAsyncImageLoader(context: Context): ImageLoader {
     return ImageLoader.Builder(context)
         .okHttpClient {
@@ -29,7 +32,7 @@ fun createAsyncImageLoader(context: Context): ImageLoader {
         .diskCache {
             DiskCache.Builder()
                 .directory(getCommonCacheDir(context)) // 自定义目录
-                .maxSizeBytes(1024L * 1024 * 1024) // 200MB
+                .maxSizeBytes(COIL_DISK_CACHE_BYTES)
                 .build()
         }
         .build()

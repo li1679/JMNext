@@ -1,25 +1,39 @@
 package com.par9uet.jm.ui.theme
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import com.materialkolor.PaletteStyle
+import com.materialkolor.rememberDynamicColorScheme
+import com.par9uet.jm.LAUNCH_THEME_KEY_DARK
+import com.par9uet.jm.LAUNCH_THEME_PREFS
 import com.par9uet.jm.data.models.COLOR_PALETTE_PRESET_DEFAULT
+import com.par9uet.jm.data.models.COLOR_PALETTE_PRESET_FOREST
+import com.par9uet.jm.data.models.COLOR_PALETTE_PRESET_LAVENDER
 import com.par9uet.jm.data.models.COLOR_PALETTE_PRESET_MONET
+import com.par9uet.jm.data.models.COLOR_PALETTE_PRESET_OCEAN
+import com.par9uet.jm.data.models.COLOR_PALETTE_PRESET_SUNSET
+import com.par9uet.jm.data.models.LocalSetting
 import com.par9uet.jm.store.LocalSettingManager
 import org.koin.compose.getKoin
 
@@ -33,29 +47,22 @@ object ExtendedTheme {
         get() = LocalExtendedColors.current
 }
 
-// 内置预设的四色（亮色/暗色），保持与 Color.kt 中的 light/dark 一致
-private val PRESET_COLORS_DARK = mapOf(
-    COLOR_PALETTE_PRESET_DEFAULT to longArrayOf(0xFFB8C7EF, 0xFFC2C5DD, 0xFFE4BAD8, 0xFFFFB4AB),
-    "ocean" to longArrayOf(0xFF37C9CD, 0xFFB1CBCB, 0xFFB0C8E8, 0xFFFFB4AB),
-    "sunset" to longArrayOf(0xFFFFB866, 0xFFE0C68F, 0xFFFFB3B5, 0xFFFFB4AB),
-    "forest" to longArrayOf(0xFF7CDFA0, 0xFFB6CCBC, 0xFFA0D0D3, 0xFFFFB4AB),
-    "lavender" to longArrayOf(0xFFD0BCFF, 0xFFCCC2DC, 0xFFEFB8C8, 0xFFFFB4AB),
-)
-private val PRESET_COLORS_LIGHT = mapOf(
-    COLOR_PALETTE_PRESET_DEFAULT to longArrayOf(0xFF4F5F7F, 0xFF5A5D72, 0xFF75546F, 0xFFBA1A1A),
-    "ocean" to longArrayOf(0xFF00696D, 0xFF4A6364, 0xFF48607E, 0xFFBA1A1A),
-    "sunset" to longArrayOf(0xFF8C5000, 0xFF735C2D, 0xFF9C4146, 0xFFBA1A1A),
-    "forest" to longArrayOf(0xFF2E6B3E, 0xFF4F6352, 0xFF38656A, 0xFFBA1A1A),
-    "lavender" to longArrayOf(0xFF6750A4, 0xFF625B71, 0xFF7D5260, 0xFFBA1A1A),
+/**
+ * 各配色预设的种子色。
+ *
+ * 一个种子即可：整套 ColorScheme（含 surface / background / outline / scrim 等
+ * 全部 role）都由它经 HCT 色调板推导，不要退回手工逐个覆盖强调色——
+ * 那样 surface 系列不会跟着变，各预设的整体观感会趋同。
+ */
+private val PRESET_SEEDS: Map<String, Color> = mapOf(
+    COLOR_PALETTE_PRESET_DEFAULT to Color(0xFF4F5F7F),
+    COLOR_PALETTE_PRESET_OCEAN to Color(0xFF00696D),
+    COLOR_PALETTE_PRESET_SUNSET to Color(0xFF8C5000),
+    COLOR_PALETTE_PRESET_FOREST to Color(0xFF2E6B3E),
+    COLOR_PALETTE_PRESET_LAVENDER to Color(0xFF6750A4),
 )
 
-private fun String.toColorOrNull(): Color? {
-    return runCatching {
-        val hex = this.removePrefix("#")
-        val long = if (hex.length == 6) "FF$hex".toLong(16) else hex.toLong(16)
-        Color(long.toInt())
-    }.getOrNull()
-}
+private val FALLBACK_SEED = PRESET_SEEDS.getValue(COLOR_PALETTE_PRESET_DEFAULT)
 
 @Composable
 fun AppTheme(
@@ -63,44 +70,55 @@ fun AppTheme(
     content: @Composable () -> Unit
 ) {
     val setting by localSettingManager.localSettingState.collectAsState()
-    val theme = setting.theme
     val context = LocalContext.current
-    val isDark = when (theme) {
+    val isDark = when (setting.theme) {
         "auto" -> isSystemInDarkTheme()
         "dark" -> true
         else -> false
     }
-    // 仅当用户选择"莫奈取色"预设时才使用动态色；其余预设始终应用调色板覆盖
+    // 仅当用户选择「莫奈取色」预设时才用系统动态色，其余一律走种子色推导
     val supportDynamic = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val useDynamic = setting.colorPalettePreset == COLOR_PALETTE_PRESET_MONET && supportDynamic
-    val baseScheme = when {
-        useDynamic && isDark -> dynamicDarkColorScheme(context)
-        useDynamic -> dynamicLightColorScheme(context)
-        isDark -> darkScheme
-        else -> lightScheme
+    val useMonet = setting.colorPalettePreset == COLOR_PALETTE_PRESET_MONET && supportDynamic
+
+    val colorScheme: ColorScheme = when {
+        useMonet && isDark -> dynamicDarkColorScheme(context)
+        useMonet -> dynamicLightColorScheme(context)
+        else -> rememberDynamicColorScheme(
+            seedColor = setting.seedColor(),
+            isDark = isDark,
+            isAmoled = false,
+            // 用户未单独指定的 role 传 null，由种子和谐推导
+            secondary = setting.customColorSecondary?.toColorOrNull(),
+            tertiary = setting.customColorTertiary?.toColorOrNull(),
+            error = setting.customColorError?.toColorOrNull(),
+            style = PaletteStyle.TonalSpot,
+        )
     }
-    val colorScheme = if (useDynamic) {
-        baseScheme
-    } else {
-        applyPaletteOverride(baseScheme, setting.colorPalettePreset, isDark) { slot ->
-            when (slot) {
-                0 -> setting.customColorPrimary
-                1 -> setting.customColorSecondary
-                2 -> setting.customColorTertiary
-                else -> setting.customColorError
-            }
+    val extendedColorScheme = extendedColorSchemeFor(colorScheme)
+
+    // 明文标记供 MainActivity 在 onCreate 阶段挑选启动窗口背景，
+    // 那里无法承受解密加密 prefs 的代价
+    LaunchedEffect(isDark) {
+        runCatching {
+            context.getSharedPreferences(LAUNCH_THEME_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(LAUNCH_THEME_KEY_DARK, isDark)
+                .apply()
         }
     }
-    val extendedColorScheme = extendedColorSchemeFor(colorScheme, isDark)
 
-    // 切换深浅色时同步刷新系统栏样式（状态栏/导航栏图标颜色）
-    val view = androidx.compose.ui.platform.LocalView.current
+    // 切换深浅色时同步刷新系统栏图标颜色
+    val view = LocalView.current
     if (!view.isInEditMode) {
-        androidx.compose.runtime.DisposableEffect(isDark) {
-            val window = (view.context as android.app.Activity).window
-            val controller = androidx.core.view.WindowCompat.getInsetsController(window, view)
-            controller.isAppearanceLightStatusBars = !isDark
-            controller.isAppearanceLightNavigationBars = !isDark
+        DisposableEffect(isDark) {
+            // 必须走 findActivity()：view.context 未必是 Activity
+            //（对话框窗口、ComposeView 容器等），直接转型会 ClassCastException
+            val window = view.context.findActivity()?.window
+            if (window != null) {
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !isDark
+                controller.isAppearanceLightNavigationBars = !isDark
+            }
             onDispose {}
         }
     }
@@ -120,53 +138,20 @@ fun AppTheme(
     }
 }
 
-private fun applyPaletteOverride(
-    base: ColorScheme,
-    presetId: String,
-    isDark: Boolean,
-    customOverride: (Int) -> String?,
-): ColorScheme {
-    val presetColors = (if (isDark) PRESET_COLORS_DARK else PRESET_COLORS_LIGHT)[presetId]
-        ?: (if (isDark) PRESET_COLORS_DARK else PRESET_COLORS_LIGHT)[COLOR_PALETTE_PRESET_DEFAULT]!!
-    val primary = customOverride(0)?.toColorOrNull() ?: Color(presetColors[0])
-    val secondary = customOverride(1)?.toColorOrNull() ?: Color(presetColors[1])
-    val tertiary = customOverride(2)?.toColorOrNull() ?: Color(presetColors[2])
-    val error = customOverride(3)?.toColorOrNull() ?: Color(presetColors[3])
-    // 浅色模式下容器色应叠加在白色上产生浅色调，深色模式叠加在黑色上产生深色调
-    val containerBase = if (isDark) Color.Black else Color.White
-    val onContainerColor = if (isDark) Color.White else Color.Black
-    return base.copy(
-        primary = primary,
-        onPrimary = if (primary.luminance() > 0.5f) Color.Black else Color.White,
-        primaryContainer = primary.copy(alpha = 0.3f).compositeOver(containerBase),
-        onPrimaryContainer = if (isDark) primary else onContainerColor,
-        inversePrimary = primary,
-        secondary = secondary,
-        onSecondary = if (secondary.luminance() > 0.5f) Color.Black else Color.White,
-        secondaryContainer = secondary.copy(alpha = 0.3f).compositeOver(containerBase),
-        onSecondaryContainer = if (isDark) secondary else onContainerColor,
-        tertiary = tertiary,
-        onTertiary = if (tertiary.luminance() > 0.5f) Color.Black else Color.White,
-        tertiaryContainer = tertiary.copy(alpha = 0.3f).compositeOver(containerBase),
-        onTertiaryContainer = if (isDark) tertiary else onContainerColor,
-        error = error,
-        onError = if (error.luminance() > 0.5f) Color.Black else Color.White,
-        errorContainer = error.copy(alpha = 0.3f).compositeOver(containerBase),
-        onErrorContainer = if (isDark) error else onContainerColor,
-    )
-}
+/** 当前配色的种子色：用户自定义主色优先，否则取预设种子 */
+private fun LocalSetting.seedColor(): Color =
+    customColorPrimary?.toColorOrNull()
+        ?: PRESET_SEEDS[colorPalettePreset]
+        ?: FALLBACK_SEED
 
-private fun Color.luminance(): Float {
-    return 0.299f * red + 0.587f * green + 0.114f * blue
-}
+private fun String.toColorOrNull(): Color? = runCatching {
+    val hex = removePrefix("#")
+    val value = if (hex.length == 6) "FF$hex".toLong(16) else hex.toLong(16)
+    Color(value.toInt())
+}.getOrNull()
 
-private fun Color.compositeOver(background: Color): Color {
-    val fgAlpha = alpha
-    if (fgAlpha >= 1f) return this
-    val a = alpha + background.alpha * (1f - fgAlpha)
-    if (a <= 0f) return Color.Transparent
-    val r = (red * fgAlpha + background.red * background.alpha * (1f - fgAlpha)) / a
-    val g = (green * fgAlpha + background.green * background.alpha * (1f - fgAlpha)) / a
-    val b = (blue * fgAlpha + background.blue * background.alpha * (1f - fgAlpha)) / a
-    return Color(r, g, b, a)
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

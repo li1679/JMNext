@@ -2,8 +2,6 @@ package com.par9uet.jm.ui.screens
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,8 +16,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -29,6 +30,8 @@ import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -40,10 +43,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,7 +61,7 @@ import com.par9uet.jm.ui.viewModel.ComicViewModel
 import com.par9uet.jm.utils.filterBlockedTags
 import org.koin.compose.getKoin
 import org.koin.compose.viewmodel.koinActivityViewModel
-import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 private const val TEXT_DISCOVER = "\u53d1\u73b0\u6f2b\u753b"
 private const val TEXT_FEATURED = "\u7cbe\u9009\u63a8\u8350"
@@ -70,6 +73,7 @@ private const val TEXT_EXTRACT = "\u63d0\u53d6"
 
 @Composable
 private fun HomeSkeleton(
+    columns: Int,
     onSearch: () -> Unit,
     onDownload: () -> Unit,
     onRecommend: () -> Unit,
@@ -111,11 +115,13 @@ private fun HomeSkeleton(
                 .fillMaxWidth()
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
-            maxItemsInEachRow = 3,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Top)
+            // 列数与间距必须与真实网格（adaptiveComicGridCells + 12dp）一致，
+            // 否则加载完成时布局会整体跳动
+            maxItemsInEachRow = columns,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Top)
         ) {
-            for (i in 0 until 18) {
+            for (i in 0 until columns * 6) {
                 key(i) {
                     ComicSkeleton(modifier = Modifier.weight(1f))
                 }
@@ -152,6 +158,8 @@ fun HomeScreen(
 
     if (homeComicState.list.isEmpty() && homeComicState.isLoading) {
         HomeSkeleton(
+            // 0 表示「自适应」，真实网格在 411dp 宽的常见机型上约为 3 列
+            columns = localSetting.homeGridColumns.takeIf { it > 0 } ?: 3,
             onSearch = onSearch,
             onDownload = onDownload,
             onRecommend = onRecommend,
@@ -162,109 +170,136 @@ fun HomeScreen(
     }
 
     val selectedTabIndexState = rememberTabIndexState()
-    val onTabClick: (index: Int) -> Unit = {
-        selectedTabIndexState.value = it.coerceIn(0, (homeComicState.list.size - 1).coerceAtLeast(0))
+    val categories = homeComicState.list
+    val allExcludedTags = remember(localSetting.blockedTagList, localSetting.homeExcludedTags) {
+        (localSetting.blockedTagList + localSetting.homeExcludedTags).distinct()
     }
+    // 各分类共享同一个横向滚动位置，切页时标签行不会跳回开头
+    val chipsScrollState = rememberScrollState()
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        val currentPageData = homeComicState.list.getOrNull(selectedTabIndexState.value)
-        val allExcludedTags = remember(localSetting.blockedTagList, localSetting.homeExcludedTags) {
-            (localSetting.blockedTagList + localSetting.homeExcludedTags).distinct()
+    val header: @Composable (categoryTitle: String, selectedIndex: Int, onSelect: (Int) -> Unit) -> Unit =
+        { categoryTitle, selectedIndex, onSelect ->
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                HomeHeader(
+                    categoryTitle = categoryTitle,
+                    onSearch = onSearch,
+                    onDownload = onDownload,
+                    onRecommend = onRecommend,
+                    onExtract = onExtract,
+                    onSign = onSign
+                )
+                HomeCategoryChips(
+                    categories = categories.map { it.title },
+                    selectedIndex = selectedIndex,
+                    onSelect = onSelect,
+                    scrollState = chipsScrollState
+                )
+            }
         }
-        val comicList = remember(currentPageData, allExcludedTags) {
-            (currentPageData?.list ?: listOf()).filterBlockedTags(allExcludedTags)
-        }
-        val chipsScrollState = rememberScrollState()
+
+    if (categories.isEmpty()) {
+        // 没有任何分类数据时仍要给出搜索入口与空状态，不能只留一片空白
         PullToRefreshBox(
             modifier = Modifier.fillMaxSize(),
             isRefreshing = homeComicState.isLoading,
             onRefresh = { comicViewModel.getHomeComic() }
         ) {
-            LazyVerticalGrid(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(selectedTabIndexState.value, homeComicState.list.size) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            val chipsScrollAtDown = chipsScrollState.value
-                            var totalX = 0f
-                            var totalY = 0f
-                            do {
-                                val event = awaitPointerEvent()
-                                val change = event.changes.firstOrNull { it.id == down.id }
-                                if (change == null) break
-                                totalX += change.position.x - change.previousPosition.x
-                                totalY += change.position.y - change.previousPosition.y
-                            } while (event.changes.any { it.pressed })
-
-                            // 如果分类标签行发生了滚动，说明用户在滑动标签，不触发切换
-                            val chipsScrolled = abs(chipsScrollState.value - chipsScrollAtDown) >= 2
-                            if (!chipsScrolled &&
-                                abs(totalX) > 72.dp.toPx() &&
-                                abs(totalX) > abs(totalY) * 1.2f
-                            ) {
-                                if (totalX < 0) {
-                                    onTabClick(selectedTabIndexState.value + 1)
-                                } else {
-                                    onTabClick(selectedTabIndexState.value - 1)
-                                }
-                            }
-                        }
-                    },
+            HomeComicGrid(
                 columns = adaptiveComicGridCells(localSetting.homeGridColumns),
-                verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Top),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 16.dp)
-            ) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        HomeHeader(
-                            categoryTitle = currentPageData?.title.orEmpty(),
-                            onSearch = onSearch,
-                            onDownload = onDownload,
-                            onRecommend = onRecommend,
-                            onExtract = onExtract,
-                            onSign = onSign
-                        )
-                        HomeCategoryChips(
-                            categories = homeComicState.list.map { it.title },
-                            selectedIndex = selectedTabIndexState.value,
-                            onSelect = onTabClick,
-                            scrollState = chipsScrollState
-                        )
+                comicList = emptyList(),
+                isLoading = homeComicState.isLoading,
+                hasExcludedTags = allExcludedTags.isNotEmpty(),
+                header = { header("", 0) {} }
+            )
+        }
+        return
+    }
+
+    val pagerState = rememberPagerState(
+        initialPage = selectedTabIndexState.value.coerceIn(0, categories.lastIndex),
+        pageCount = { categories.size }
+    )
+    val scope = rememberCoroutineScope()
+    // 分类选中态回写，供离开首页后再回来时恢复
+    LaunchedEffect(pagerState.currentPage) {
+        selectedTabIndexState.value = pagerState.currentPage
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize(),
+        // 每页保有自己的滚动位置，切分类不会停在上一个列表的偏移量上
+        beyondViewportPageCount = 0
+    ) { page ->
+        val pageData = categories.getOrNull(page)
+        val comicList = remember(pageData, allExcludedTags) {
+            (pageData?.list ?: listOf()).filterBlockedTags(allExcludedTags)
+        }
+        PullToRefreshBox(
+            modifier = Modifier.fillMaxSize(),
+            isRefreshing = homeComicState.isLoading,
+            onRefresh = { comicViewModel.getHomeComic() }
+        ) {
+            HomeComicGrid(
+                columns = adaptiveComicGridCells(localSetting.homeGridColumns),
+                comicList = comicList,
+                isLoading = homeComicState.isLoading,
+                hasExcludedTags = allExcludedTags.isNotEmpty(),
+                header = {
+                    header(pageData?.title.orEmpty(), page) { index ->
+                        scope.launch { pagerState.animateScrollToPage(index) }
                     }
                 }
-                items(items = comicList, key = { it.id }) {
-                    Comic(it)
-                }
-                if (comicList.isEmpty() && !homeComicState.isLoading) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 48.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            )
-                            Text(
-                                text = if (allExcludedTags.isNotEmpty()) "当前分类的漫画均被标签排除过滤" else "暂无漫画",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (allExcludedTags.isNotEmpty()) {
-                                Text(
-                                    text = "可在 设置 → 标签排除 中调整",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeComicGrid(
+    columns: GridCells,
+    comicList: List<com.par9uet.jm.data.models.Comic>,
+    isLoading: Boolean,
+    hasExcludedTags: Boolean,
+    header: @Composable () -> Unit,
+) {
+    LazyVerticalGrid(
+        modifier = Modifier.fillMaxSize(),
+        columns = columns,
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Top),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 16.dp)
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) { header() }
+        items(items = comicList, key = { it.id }) {
+            Comic(it)
+        }
+        if (comicList.isEmpty() && !isLoading) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    )
+                    Text(
+                        text = if (hasExcludedTags) "当前分类的漫画均被标签排除过滤" else "暂无漫画",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (hasExcludedTags) {
+                        Text(
+                            text = "可在 设置 → 标签排除 中调整",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
                     }
                 }
             }
@@ -364,11 +399,7 @@ private fun HomeHeader(
     }
 }
 
-/**
- * 首页分类按钮区。
- * 使用 Row + horizontalScroll，每个子组件用 pointerInput 手动检测点击。
- * 不使用 clickable（本地坐标位移为零导致误判 tap）。
- */
+/** 首页分类按钮区 */
 @Composable
 private fun HomeCategoryChips(
     categories: List<String>,
@@ -384,60 +415,24 @@ private fun HomeCategoryChips(
     ) {
         categories.forEachIndexed { index, title ->
             key(title) {
-                CategoryChipItem(
-                    title = title,
+                FilterChip(
                     selected = selectedIndex == index,
-                    scrollState = scrollState,
-                    onClick = { onSelect(index) }
+                    onClick = { onSelect(index) },
+                    label = {
+                        Text(
+                            text = title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun CategoryChipItem(
-    title: String,
-    selected: Boolean,
-    scrollState: ScrollState,
-    onClick: () -> Unit
-) {
-    val containerColor = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceContainer
-    }
-    val labelColor = if (selected) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    Surface(
-        modifier = Modifier.pointerInput(Unit) {
-            awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = false)
-                val scrollAtDown = scrollState.value
-                do {
-                    val event = awaitPointerEvent()
-                } while (event.changes.any { it.pressed })
-                val scrollDelta = abs(scrollState.value - scrollAtDown)
-                if (scrollDelta < 2) {
-                    onClick()
-                }
-            }
-        },
-        shape = MaterialTheme.shapes.large,
-        color = containerColor,
-        contentColor = labelColor
-    ) {
-        Text(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            text = title,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            style = MaterialTheme.typography.labelLarge
-        )
     }
 }
 

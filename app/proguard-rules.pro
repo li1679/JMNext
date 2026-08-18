@@ -1,6 +1,13 @@
 # Project ProGuard / R8 rules.
+#
+# 原则：只保留「运行时靠反射 / 名字查找」的东西。
+# 之前这里有大量 `-keep class com.par9uet.jm.utils.** { *; }` 这类整包规则，
+# 把 utils / store / repository / storage / di 全保留了下来，
+# 等于 isMinifyEnabled=true 基本没生效 —— 既不缩包也不混淆。
+# Koin 用的是编译期 lambda（single { ... }），不需要保留业务类；
+# 真正需要 keep 的只有 Gson 反序列化用到的模型。
 
-# Keep metadata needed by Retrofit, Gson, Koin, Room, and suspend functions.
+# Kotlin 元数据与协程
 -keepattributes Signature
 -keepattributes *Annotation*
 -keepattributes RuntimeVisibleAnnotations
@@ -9,56 +16,44 @@
 -keepattributes InnerClasses
 
 -keep class kotlin.Metadata { *; }
--keep class kotlinx.coroutines.** { *; }
 -dontwarn kotlinx.coroutines.**
 
-# Retrofit interfaces and annotations must stay visible to runtime parsing.
--keep class retrofit2.** { *; }
--keep interface * extends retrofit2.Call
+# Retrofit：接口方法上的注解要在运行时可读，泛型签名要保留
+-keepattributes RuntimeVisibleParameterAnnotations
 -keepclasseswithmembers class * {
     @retrofit2.http.* <methods>;
 }
+-keep,allowobfuscation interface <1>
 -dontwarn retrofit2.**
 -dontwarn javax.annotation.**
 -dontwarn org.codehaus.mojo.animal_sniffer.**
 
-# Network response models are deserialized through Gson/Retrofit.
+# Gson：字段名即 JSON 键，参与序列化的模型不能被混淆
 -keep class com.par9uet.jm.retrofit.model.** { *; }
--keepclassmembers class com.par9uet.jm.retrofit.model.** {
-    *;
-}
-
-# Gson is also used for persisted local data. Keep field names so existing
-# installed data and API JSON remain compatible after R8 obfuscation.
 -keep class com.par9uet.jm.data.models.** { *; }
 -keep class com.par9uet.jm.database.model.** { *; }
 -keep class com.par9uet.jm.ui.models.** { *; }
--keep class com.par9uet.jm.task.AppTaskInfo { *; }
--keep class com.par9uet.jm.utils.** { *; }
--keep class com.par9uet.jm.utils.DownloadSpeedTracker { *; }
--keepclassmembers class com.par9uet.jm.utils.DownloadSpeedTracker {
-    public static ** INSTANCE;
-    <methods>;
-}
+# 本地持久化（设置 / Cookie / 备份）也走 Gson
+-keep class com.par9uet.jm.store.BackupMeta { *; }
+-keep class com.par9uet.jm.store.BackupFile { *; }
+-keep class com.par9uet.jm.store.BackupContentOptions { *; }
+-keep class com.par9uet.jm.store.ComicCacheBackup { *; }
+-keep class com.par9uet.jm.store.ComicGroupBackup { *; }
+-keep class com.par9uet.jm.store.ChapterBackup { *; }
+-keep class com.par9uet.jm.cache.DownloadComicCacheConfig { *; }
+-keep class com.par9uet.jm.cache.DownloadComicCacheChapter { *; }
+-keep class com.par9uet.jm.utils.SimpleRecommender$PreferenceData { *; }
 -keepclassmembers,allowobfuscation class * {
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
-# Room and WorkManager rely on generated/runtime-discovered classes in release.
+# Room 与 WorkManager：类名在运行时被查找
 -keep class * extends androidx.room.RoomDatabase { *; }
--keep class com.par9uet.jm.database.** { *; }
--keep class com.par9uet.jm.worker.** { *; }
+-keep class com.par9uet.jm.database.dao.** { *; }
 -keep class * extends androidx.work.ListenableWorker { *; }
 -dontwarn androidx.room.**
 -dontwarn androidx.work.**
 
-# Koin resolves definitions and the WorkManager factory at runtime.
--keep class org.koin.** { *; }
--keep class com.par9uet.jm.di.** { *; }
--keep class com.par9uet.jm.store.** { *; }
--keep class com.par9uet.jm.repository.** { *; }
--keep class com.par9uet.jm.storage.** { *; }
--keep class com.par9uet.jm.JmApplication { *; }
 -dontwarn org.koin.**
 
 # JMComic-Api-Java: keep AndroidImageProcessor and SPI service files so
@@ -68,6 +63,9 @@
 -keep class io.github.jukomu.jmcomic.core.image.spi.** { *; }
 -dontwarn io.github.jukomu.jmcomic.core.image.AwtImageProcessor
 -keepnames class io.github.jukomu.jmcomic.core.image.spi.** { *; }
+# 内置 API 的模型同样经 Gson/反射构造
+-keep class io.github.jukomu.jmcomic.api.model.** { *; }
+-keep class io.github.jukomu.jmcomic.core.config.** { *; }
 
 # Transitive dependency com.luciad.imageio.webp references javax.imageio.* which
 # is not available on Android. Android natively supports WebP via BitmapFactory,
@@ -88,5 +86,4 @@
 # Prevents R8 from stripping desugared java.time APIs in release builds on Android 6/7
 -keep class j$.** { *; }
 -dontwarn j$.**
--keep class java.time.** { *; }
 -dontwarn java.time.**

@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 跟随系统深浅色（有 values-night 变体），用于未记录过应用主题时的兜底 -->
     <color name="launch_background">#FFFFFF</color>
+
+    <!-- 应用自身主题对应的启动窗口背景。
+         不能只靠 values-night：那跟的是系统深浅色，而应用主题是用户自己选的
+         light / dark / auto —— 系统浅色 + 应用设深色时，启动窗口会先白一下再切深色。 -->
+    <color name="launch_background_light">#FFFFFF</color>
+    <color name="launch_background_dark">#121318</color>
 </resources>

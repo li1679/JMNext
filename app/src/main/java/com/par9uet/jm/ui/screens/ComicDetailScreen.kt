@@ -1,6 +1,8 @@
 package com.par9uet.jm.ui.screens
 
 import android.net.Uri
+import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,20 +24,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.RemoveRedEye
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -44,13 +45,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -64,18 +65,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.par9uet.jm.data.models.Comic
 import com.par9uet.jm.storage.ComicReadHistory
 import com.par9uet.jm.store.DownloadManager
 import com.par9uet.jm.store.ReadHistoryManager
+import com.par9uet.jm.store.RemoteSettingManager
 import com.par9uet.jm.store.UserManager
 import com.par9uet.jm.ui.components.ChapterMultiSelectDialog
 import com.par9uet.jm.ui.components.ComicContentTag
@@ -87,39 +95,213 @@ import com.par9uet.jm.utils.shimmer
 import org.koin.compose.getKoin
 import org.koin.compose.viewmodel.koinActivityViewModel
 
+/** 头图里小封面的宽度 */
+private val HEADER_COVER_WIDTH = 112.dp
+
+/** 简介收起时显示的行数 */
+private const val DESCRIPTION_COLLAPSED_LINES = 4
+
+/**
+ * 大数字用中文习惯的「万」缩写。
+ * 浏览量动辄五六位，原样铺开会把标题挤掉，也不好扫读。
+ */
+private fun formatCount(value: Int): String = when {
+    value >= 10_000 -> {
+        val wan = value / 10_000
+        val decimal = (value % 10_000) / 1_000
+        if (decimal == 0) "${wan}万" else "$wan.${decimal}万"
+    }
+
+    else -> value.toString()
+}
+
+/**
+ * 头图背景的模糊处理。
+ *
+ * [Modifier.blur] 只在 API 31+ 生效，而本项目 minSdk 是 23。真正让低版本
+ * 也有效果的是「把封面按 32px 请求再拉满」——放大本身就产生柔和色块，
+ * 而且解码的是一张极小的图，内存代价几乎为零。31+ 再叠一层真模糊让边缘更顺。
+ */
+private fun Modifier.backdropBlur(): Modifier =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) this.blur(24.dp) else this
+
 @Composable
-private fun ComicInfoListItem(
-    modifier: Modifier = Modifier,
+private fun ComicStat(
     icon: ImageVector,
     label: String,
-    value: String,
+    value: Int,
 ) {
-    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        AssistChip(
-            border = null,
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 用 Box 而非 Chip 类组件：这里只是装饰，不应带有点击语义与无障碍角色
+        Box(
             modifier = Modifier
-                .width(50.dp)
-                .height(50.dp),
-            colors = AssistChipDefaults.assistChipColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ),
-            onClick = {},
-            label = {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        )
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(18.dp)
+            )
+        }
         Column {
+            // 数值是主要信息，字号与字重都应高于标签
             Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge
+                text = formatCount(value),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
             Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * 详情页头图：模糊封面铺底 + 小封面 + 标题/作者/统计并排。
+ *
+ * 封面不铺满宽度：3:4 全宽会占掉约 70% 首屏，把标题、标签、按钮全推到折叠线以下。
+ */
+@Composable
+private fun ComicDetailHeader(
+    comic: Comic,
+    onAuthorClick: (String) -> Unit,
+    remoteSettingManager: RemoteSettingManager = getKoin().get(),
+    imageLoader: ImageLoader = getKoin().get(),
+) {
+    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsState()
+    val context = LocalContext.current
+    val surface = MaterialTheme.colorScheme.surface
+    val coverUrl = "${remoteSetting.imgHost}/media/albums/${comic.id}_3x4.jpg"
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        AsyncImage(
+            model = remember(coverUrl) {
+                ImageRequest.Builder(context).data(coverUrl).size(32).build()
+            },
+            imageLoader = imageLoader,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .matchParentSize()
+                .backdropBlur()
+        )
+        // 遮罩：顶部与底部压回 surface，中段留出一点透，
+        // 这样上接顶栏、下接正文都没有硬边界，而每本书又带上了自己的色调
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to surface,
+                        0.28f to surface.copy(alpha = 0.55f),
+                        1f to surface
+                    )
+                )
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            ComicCoverImage(
+                comic = comic,
+                modifier = Modifier.width(HEADER_COVER_WIDTH)
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = comic.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    comic.authorList.forEach {
+                        key(it) {
+                            Text(
+                                modifier = Modifier.clickable(onClick = { onAuthorClick(it) }),
+                                text = it,
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = "JM${comic.id}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                    ComicStat(Icons.Default.Favorite, "喜欢", comic.likeCount)
+                    ComicStat(Icons.Default.RemoveRedEye, "浏览", comic.readCount)
+                }
+            }
+        }
+    }
+}
+
+/** 带行首标题的标签分组。没有分组标题时，三排不同颜色的 chip 用户根本不知道各代表什么。 */
+@Composable
+private fun TagGroup(
+    title: String,
+    tags: List<String>,
+    tag: @Composable (String) -> Unit,
+) {
+    if (tags.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            tags.forEach { key(it) { tag(it) } }
+        }
+    }
+}
+
+/** 简介。数据里一直有 description 字段，但详情页从来没显示过。 */
+@Composable
+private fun ComicDescription(description: String) {
+    if (description.isBlank()) return
+    var expanded by remember(description) { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "简介",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = if (expanded) Int.MAX_VALUE else DESCRIPTION_COLLAPSED_LINES,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.clickable { expanded = !expanded }
+        )
+        if (!expanded) {
+            Text(
+                text = "展开",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { expanded = true }
             )
         }
     }
@@ -127,36 +309,55 @@ private fun ComicInfoListItem(
 
 @Composable
 private fun ComicDetailSkeleton() {
-    val scrollState = rememberScrollState()
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(0.75f)
-                    .shimmer()
-            )
-            Column(
-                modifier = Modifier.padding(horizontal = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            // 骨架屏要占住真实布局的位置，否则加载完成时内容会整体跳动
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .height(36.dp)
-                        .clip(MaterialTheme.shapes.extraSmall)
+                        .width(HEADER_COVER_WIDTH)
+                        .aspectRatio(3f / 4f)
+                        .clip(MaterialTheme.shapes.medium)
                         .shimmer()
                 )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(28.dp)
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .shimmer()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.5f)
+                            .height(20.dp)
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .shimmer()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.8f)
+                            .height(36.dp)
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .shimmer()
+                    )
+                }
+            }
+            repeat(3) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.4f)
-                        .height(34.dp)
+                        .fillMaxWidth(if (it == 2) 0.6f else 1f)
+                        .height(32.dp)
                         .clip(MaterialTheme.shapes.extraSmall)
                         .shimmer()
                 )
@@ -201,69 +402,53 @@ private fun ComicDetailErrorPage(
     }
 }
 
+/** 详情页正文：头图之外的所有分节，手机与平板布局共用 */
 @Composable
-private fun ComicMetadataContent(
+private fun ComicDetailSections(
     comic: Comic,
     onTagSearch: (String) -> Unit,
+    onComments: () -> Unit,
 ) {
-    Text(
-        modifier = Modifier.padding(top = 10.dp),
-        text = comic.name,
-        style = MaterialTheme.typography.titleLarge,
-        lineHeight = 1.5.em,
-        fontWeight = FontWeight.Bold,
-    )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        comic.authorList.forEach {
-            key(it) {
-                Text(
-                    modifier = Modifier.clickable(onClick = { onTagSearch(it) }),
-                    text = it,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        ComicDescription(comic.description)
+        TagGroup("标签", comic.tagList) { ComicContentTag(it) }
+        TagGroup("角色", comic.roleList) { ComicRoleTag(it) }
+        TagGroup("作品", comic.workList) { ComicWorkTag(it) }
+        HorizontalDivider()
+        Surface(
+            onClick = onComments,
+            shape = MaterialTheme.shapes.medium,
+            color = Color.Transparent,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    Icons.Default.ChatBubbleOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-        }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ComicInfoListItem(
-            modifier = Modifier.weight(.5f),
-            icon = Icons.Default.Favorite,
-            label = "\u559c\u6b22",
-            value = comic.likeCount.toString()
-        )
-        ComicInfoListItem(
-            modifier = Modifier.weight(.5f),
-            icon = Icons.Default.RemoveRedEye,
-            label = "\u6d4f\u89c8",
-            value = comic.readCount.toString()
-        )
-    }
-    if (comic.tagList.isNotEmpty()) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            comic.tagList.forEach {
-                key(it) {
-                    ComicContentTag(it)
-                }
-            }
-        }
-    }
-    if (comic.roleList.isNotEmpty()) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            comic.roleList.forEach {
-                key(it) {
-                    ComicRoleTag(it)
-                }
-            }
-        }
-    }
-    if (comic.workList.isNotEmpty()) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            comic.workList.forEach {
-                key(it) {
-                    ComicWorkTag(it)
-                }
+                Text(
+                    text = "评论",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = if (comic.commentCount > 0) formatCount(comic.commentCount) else "暂无",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -279,7 +464,6 @@ fun ComicDetailScreen(
     userManager: UserManager = getKoin().get()
 ) {
     val mainNavController = LocalMainNavController.current
-    val scrollState = rememberScrollState()
     val comicDetailState by comicDetailViewModel.comicDetailState.collectAsState()
     val readHistory by readHistoryManager.readHistoryState.collectAsState()
     val isLogin by userManager.isLoginState.collectAsState(false)
@@ -307,13 +491,13 @@ fun ComicDetailScreen(
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                        containerColor = MaterialTheme.colorScheme.surface,
                     ),
                     navigationIcon = {
                         IconButton(onClick = { mainNavController.popBackStack() }) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "\u8fd4\u56de"
+                                contentDescription = "返回"
                             )
                         }
                     },
@@ -347,14 +531,14 @@ fun ComicDetailScreen(
             val comicTitle = comicDetailState.data?.name ?: ""
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                    containerColor = MaterialTheme.colorScheme.surface,
                     scrolledContainerColor = MaterialTheme.colorScheme.surface,
                 ),
                 navigationIcon = {
                     IconButton(onClick = { mainNavController.popBackStack() }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "\u8fd4\u56de"
+                            contentDescription = "返回"
                         )
                     }
                 },
@@ -416,12 +600,12 @@ fun ComicDetailScreen(
 
         if (showDownloadChapterDialog) {
             ChapterMultiSelectDialog(
-                title = "\u9009\u62e9\u7f13\u5b58\u7ae0\u8282",
+                title = "选择缓存章节",
                 chapters = comic.comicChapterList,
                 selectedChapterIds = selectedChapterIds,
                 onSelectedChange = { selectedChapterIds = it },
                 onDismiss = { showDownloadChapterDialog = false },
-                confirmText = "\u5f00\u59cb\u7f13\u5b58",
+                confirmText = "开始缓存",
                 onConfirm = {
                     val selectedChapters = comic.comicChapterList.filter { it.id in selectedChapterIds }
                     downloadManager.downloadChapters(comic, selectedChapters)
@@ -429,6 +613,8 @@ fun ComicDetailScreen(
                 }
             )
         }
+
+        val openComments = { mainNavController.navigate("comment/${comic.id}") }
 
         PullToRefreshBox(
             isRefreshing = comicDetailState.isLoading,
@@ -438,15 +624,12 @@ fun ComicDetailScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
-            BoxWithConstraints(
-                modifier = Modifier.fillMaxSize(),
-            ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val isTabletLayout = maxWidth >= 700.dp
-                val viewportHeight = maxHeight
                 if (isTabletLayout) {
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .fillMaxSize()
                             .padding(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(18.dp)
                     ) {
@@ -457,41 +640,58 @@ fun ComicDetailScreen(
                                 .weight(0.42f),
                             showIdChip = true
                         )
-                        Column(
-                            modifier = Modifier
-                                .weight(0.58f)
-                                .verticalScroll(scrollState),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        // 用 LazyColumn 而非 verticalScroll：标签 chip 与长内容
+                        // 不应在首屏一次性全部组合
+                        LazyColumn(
+                            modifier = Modifier.weight(0.58f),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(bottom = 16.dp)
                         ) {
-                            ComicMetadataContent(comic, ::searchTag)
-                            ComicCommentArea(
-                                comicId = comic.id,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(viewportHeight)
-                            )
+                            item {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        text = comic.name,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        comic.authorList.forEach {
+                                            key(it) {
+                                                Text(
+                                                    modifier = Modifier.clickable { searchTag(it) },
+                                                    text = it,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                                        ComicStat(Icons.Default.Favorite, "喜欢", comic.likeCount)
+                                        ComicStat(Icons.Default.RemoveRedEye, "浏览", comic.readCount)
+                                    }
+                                }
+                            }
+                            item {
+                                ComicDetailSections(comic, ::searchTag, openComments)
+                            }
                         }
                     }
                 } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scrollState),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
-                        ComicCoverImage(comic = comic, showIdChip = true)
-                        Column(
-                            modifier = Modifier.padding(horizontal = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            ComicMetadataContent(comic, ::searchTag)
+                        item {
+                            ComicDetailHeader(comic = comic, onAuthorClick = ::searchTag)
                         }
-                        ComicCommentArea(
-                            comicId = comic.id,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(viewportHeight)
-                        )
+                        item {
+                            ComicDetailSections(comic, ::searchTag, openComments)
+                        }
                     }
                 }
             }
@@ -525,21 +725,23 @@ private fun FolderPickerSheet(
         sheetState = sheetState,
     ) {
         Text(
-            text = "\u9009\u62e9\u6536\u85cf\u5939",
+            text = "选择收藏夹",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
         )
         HorizontalDivider()
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.6f)
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.6f)
         ) {
             // "0"（全部）排第一，其余按原序
             val sortedFolders = linkedMapOf<String, String>().apply {
                 folderList["0"]?.let { put("0", it) }
                 folderList.filterKeys { it != "0" }.forEach { (id, name) -> put(id, name) }
                 if (containsKey("0").not() && folderList.isNotEmpty()) {
-                    put("0", "\u5168\u90e8")
+                    put("0", "全部")
                 }
             }
             items(sortedFolders.size) { index ->
@@ -585,45 +787,43 @@ private fun ComicDetailBottomBar(
             Row {
                 IconButton(onClick = onLike) {
                     if (comic.isLike) {
-                        Icon(Icons.Default.Favorite, contentDescription = "\u5df2\u559c\u6b22", tint = MaterialTheme.colorScheme.error)
+                        Icon(Icons.Default.Favorite, contentDescription = "已喜欢", tint = MaterialTheme.colorScheme.error)
                     } else {
-                        Icon(Icons.Default.FavoriteBorder, contentDescription = "\u559c\u6b22")
+                        Icon(Icons.Default.FavoriteBorder, contentDescription = "喜欢")
                     }
                 }
                 IconButton(onClick = onCollect) {
                     if (comic.isCollect) {
-                        Icon(Icons.Filled.Bookmark, contentDescription = "\u5df2\u6536\u85cf", tint = MaterialTheme.colorScheme.tertiary)
+                        Icon(Icons.Filled.Bookmark, contentDescription = "已收藏", tint = MaterialTheme.colorScheme.tertiary)
                     } else {
-                        Icon(Icons.Filled.BookmarkBorder, contentDescription = "\u6536\u85cf")
+                        Icon(Icons.Filled.BookmarkBorder, contentDescription = "收藏")
                     }
                 }
                 IconButton(onClick = onRelated) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = "\u76f8\u5173")
+                    Icon(Icons.Default.AutoAwesome, contentDescription = "相关")
                 }
                 IconButton(onClick = onDownload) {
-                    Icon(Icons.Default.Download, contentDescription = "\u7f13\u5b58")
+                    Icon(Icons.Default.Download, contentDescription = "缓存")
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
             val lastReadChapterId = readHistoryManager.lastReadChapterId(comic, readHistory)
             if (comic.comicChapterList.isEmpty()) {
-                Button(
-                    onClick = { onRead(lastReadChapterId ?: comic.id) },
-                    shape = CircleShape
-                ) {
-                    Text(if (lastReadChapterId != null) "\u7ee7\u7eed\u9605\u8bfb" else "\u5f00\u59cb\u9605\u8bfb")
+                // Button 默认即 pill 形，显式设 CircleShape 会把宽按钮两端压成正半圆
+                Button(onClick = { onRead(lastReadChapterId ?: comic.id) }) {
+                    Text(if (lastReadChapterId != null) "继续阅读" else "开始阅读")
                 }
             } else {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Button(
+                    // 「章节」是次要操作，用 Outlined 与主操作拉开层级
+                    OutlinedButton(
                         contentPadding = PaddingValues(horizontal = 16.dp),
-                        onClick = onChapters,
-                        shape = CircleShape
+                        onClick = onChapters
                     ) {
-                        Text("\u7ae0\u8282")
+                        Text("章节")
                     }
                     Button(
                         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -632,10 +832,9 @@ private fun ComicDetailBottomBar(
                                 ?: comic.comicChapterList.firstOrNull()?.id
                                 ?: comic.id
                             onRead(targetChapterId)
-                        },
-                        shape = CircleShape
+                        }
                     ) {
-                        Text(if (lastReadChapterId != null) "\u7ee7\u7eed" else "\u9605\u8bfb")
+                        Text(if (lastReadChapterId != null) "继续阅读" else "开始阅读")
                     }
                 }
             }

@@ -29,7 +29,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNot
 import org.koin.androidx.compose.koinViewModel
 
-private const val CLICK_PAGE_TURN_ANIMATION_MS = 60
+// 过短（如 60ms）时 animateScrollToPage 近似硬切，反而被感知成卡顿
+private const val CLICK_PAGE_TURN_ANIMATION_MS = 180
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

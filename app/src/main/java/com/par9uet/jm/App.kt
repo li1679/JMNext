@@ -47,6 +47,24 @@ import kotlinx.coroutines.flow.first
 import org.koin.compose.getKoin
 import org.koin.compose.viewmodel.koinActivityViewModel
 
+/** 启动动画的最短可见时间，避免加载很快时闪一下 */
+private const val SPLASH_MIN_VISIBLE_MS = 400L
+
+/**
+ * 从剪贴板文本里识别漫画编码。
+ *
+ * 要求形式明确：带 JM 前缀，或整串本身就是纯数字。
+ * 不能抽取任意文本里的全部数字再拼接——「2024年10月」「订单号」都会误命中。
+ */
+private val JM_CODE_REGEX = Regex("""(?i)JM[\s:：]*(\d{3,12})""")
+
+private fun extractComicId(text: String): Int? {
+    val trimmed = text.trim()
+    JM_CODE_REGEX.find(trimmed)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
+    if (trimmed.length in 3..12 && trimmed.all { it.isDigit() }) return trimmed.toIntOrNull()
+    return null
+}
+
 @Composable
 fun App(
     globalViewModel: GlobalViewModel = koinActivityViewModel(),
@@ -96,10 +114,12 @@ fun App(
             sessionNsfwDismissed = true
         }
     }
-    // 启动加载动画：设置加载完成且无需引导时，显示 2.5 秒后自动消失
+    // 加载完成后只补足「最短显示时间」的缺口，通常等于立即放行
+    val splashStartedAt = remember { System.currentTimeMillis() }
     LaunchedEffect(settingsLoaded, showOnboarding) {
         if (settingsLoaded && !showOnboarding) {
-            kotlinx.coroutines.delay(2500L)
+            val remaining = SPLASH_MIN_VISIBLE_MS - (System.currentTimeMillis() - splashStartedAt)
+            if (remaining > 0) kotlinx.coroutines.delay(remaining)
             showLoadingScreen = false
         }
     }
@@ -155,10 +175,10 @@ fun App(
                     val clipText = clipboardManager.getText()?.text ?: ""
                     if (clipText.isNotBlank() && clipText != lastClipboardText) {
                         lastClipboardText = clipText
-                        val digits = clipText.filter { it.isDigit() }
-                        if (digits.length in 3..12) {
+                        val comicId = extractComicId(clipText)
+                        if (comicId != null) {
                             clipboardDetectLoading = true
-                            clipboardDetectedComicId = digits.toIntOrNull()
+                            clipboardDetectedComicId = comicId
                         }
                     }
                 }
@@ -291,7 +311,6 @@ fun App(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
                     ) {
-                        // 左侧封面小窗口
                         coil.compose.AsyncImage(
                             model = "${remoteSetting.imgHost}/media/albums/${detectedComic.id}_3x4.jpg",
                             imageLoader = imageLoader,
@@ -302,7 +321,6 @@ fun App(
                                 .height(128.dp)
                                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
                         )
-                        // 右侧信息
                         Column(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)

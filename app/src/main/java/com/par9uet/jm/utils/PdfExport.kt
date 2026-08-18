@@ -40,23 +40,21 @@ fun exportComicToPdf(
     context: Context,
     comic: DownloadComic,
     treeUri: Uri
-): String {
+): List<String> {
     val imageDir = getComicImageDir(context, comic)
         ?: throw IllegalStateException("未找到本地缓存图片")
     val imageFiles = listComicImageFiles(imageDir)
     if (imageFiles.isEmpty()) {
         throw IllegalStateException("未找到可导出的缓存图片")
     }
-
-    val fileName = safeFileName("${comic.name}_${comic.id}.pdf")
-    return writeImagesToPdf(context, treeUri, fileName, imageFiles)
+    return writeChunkedPdf(context, treeUri, "${comic.name}_${comic.id}", imageFiles)
 }
 
 fun exportComicsToMergedPdf(
     context: Context,
     comics: List<DownloadComic>,
     treeUri: Uri
-): String {
+): List<String> {
     val imageFiles = comics.flatMap { comic ->
         getComicImageDir(context, comic)?.let(::listComicImageFiles).orEmpty()
     }
@@ -66,8 +64,7 @@ fun exportComicsToMergedPdf(
     val groupName = comics.firstOrNull { it.groupName.isNotBlank() }?.groupName
         ?: comics.firstOrNull()?.name
         ?: "comic"
-    val fileName = safeFileName("${groupName}_合并_${comics.size}章.pdf")
-    return writeImagesToPdf(context, treeUri, fileName, imageFiles)
+    return writeChunkedPdf(context, treeUri, "${groupName}_合并_${comics.size}章", imageFiles)
 }
 
 fun exportComicsToSeparatePdf(
@@ -78,7 +75,29 @@ fun exportComicsToSeparatePdf(
     if (comics.isEmpty()) {
         throw IllegalStateException("没有可导出的缓存章节")
     }
-    return comics.map { exportComicToPdf(context, it, treeUri) }
+    return comics.flatMap { exportComicToPdf(context, it, treeUri) }
+}
+
+/** 单个 PDF 文件的最大页数 */
+private const val PDF_MAX_PAGES_PER_FILE = 120
+
+/**
+ * 按页数分卷写出 PDF。
+ *
+ * PdfDocument 要求所有页记录完毕后才能 writeTo，文档缓冲区随页数单调增长；
+ * 不分卷时页数越多峰值越高且没有上限。超出上限时文件名追加 _1 / _2 序号。
+ */
+private fun writeChunkedPdf(
+    context: Context,
+    treeUri: Uri,
+    baseName: String,
+    imageFiles: List<File>
+): List<String> {
+    val chunks = imageFiles.chunked(PDF_MAX_PAGES_PER_FILE)
+    return chunks.mapIndexed { index, chunk ->
+        val suffix = if (chunks.size == 1) "" else "_${index + 1}"
+        writeImagesToPdf(context, treeUri, safeFileName("$baseName$suffix.pdf"), chunk)
+    }
 }
 
 private const val PDF_MAX_BITMAP_DIMENSION = 2000

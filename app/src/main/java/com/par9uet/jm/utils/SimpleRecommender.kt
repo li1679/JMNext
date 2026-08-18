@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
@@ -34,6 +36,12 @@ object SimpleRecommender {
     private const val MAX_SAMPLE = 30
     private const val MAX_CANDIDATE_ENRICH = 80
     private const val GET_ALBUM_TIMEOUT_MS = 30_000L
+
+    /** 并发拉取详情的上限。原先是把 80 个 id 一次性 async 出去，会打满 IO 调度器并触发限流。 */
+    private const val ALBUM_FETCH_CONCURRENCY = 6
+
+    /** 偏好缓存有效期。原先只要文件存在就直接复用，推荐结果会永久冻结在第一次提取的状态。 */
+    private const val PREFERENCE_TTL_MS = 24 * 60 * 60 * 1000L
 
     /** 用户偏好数据，包含标签频率与已收藏 ID 集合。 */
     data class PreferenceData(
@@ -163,22 +171,25 @@ object SimpleRecommender {
         return matched.toDouble() / totalWeight
     }
 
-    /** 并发获取多个本子的标签信息，使用协程实现并行。 */
+    /** 并发获取多个本子的标签信息，用信号量限制同时在飞的请求数。 */
     private suspend fun parallelGetAlbumTags(
         client: JmApiClient,
         ids: List<String>
     ): Map<String, List<String>> = coroutineScope {
+        val semaphore = Semaphore(ALBUM_FETCH_CONCURRENCY)
         val results = ids.map { id ->
             async(Dispatchers.IO) {
-                try {
-                    val album = withTimeoutOrNull(GET_ALBUM_TIMEOUT_MS) {
-                        client.getAlbum(id)
+                semaphore.withPermit {
+                    try {
+                        val album = withTimeoutOrNull(GET_ALBUM_TIMEOUT_MS) {
+                            client.getAlbum(id)
+                        }
+                        val tags = album?.tags
+                        AlbumTags(id, tags ?: emptyList())
+                    } catch (e: Exception) {
+                        Log.d(TAG, "getAlbum $id failed: ${e.message}")
+                        AlbumTags(id, emptyList())
                     }
-                    val tags = album?.tags
-                    AlbumTags(id, tags ?: emptyList())
-                } catch (e: Exception) {
-                    Log.d(TAG, "getAlbum $id failed: ${e.message}")
-                    AlbumTags(id, emptyList())
                 }
             }
         }.awaitAll()
@@ -240,11 +251,12 @@ object SimpleRecommender {
             PreferenceData(tagFreq, favoritedIds)
         }
 
-    /** 从缓存文件加载偏好数据。 */
+    /** 从缓存文件加载偏好数据，超过 [PREFERENCE_TTL_MS] 视为过期。 */
     private fun loadFromFile(cacheDir: File): PreferenceData? {
         return try {
             val file = File(cacheDir, CACHE_FILE_NAME)
             if (!file.exists()) return null
+            if (System.currentTimeMillis() - file.lastModified() > PREFERENCE_TTL_MS) return null
             val json = file.readText()
             val type = object : TypeToken<PreferenceData>() {}.type
             GSON.fromJson(json, type)

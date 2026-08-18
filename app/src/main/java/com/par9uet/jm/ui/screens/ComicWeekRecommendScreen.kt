@@ -90,7 +90,7 @@ fun ComicWeekRecommendScreen(
         comicViewModel.getWeekData()
     }
     CommonScaffold(
-        title = "每周推荐"
+        title = "每周必看"
     ) {
         Column {
             if (weekDataState.data != null) {

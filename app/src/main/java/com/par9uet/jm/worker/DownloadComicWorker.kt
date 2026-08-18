@@ -34,13 +34,25 @@ import com.par9uet.jm.utils.cancelProgressNotification
 import com.par9uet.jm.utils.compressWebpCompat
 import com.par9uet.jm.utils.showProgressNotification
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicInteger
 
 private const val DOWNLOAD_PAGE_TIMEOUT_MS = 180_000L
 private const val DOWNLOAD_MAX_ATTEMPTS = 6
+
+/** 单章内同时下载的页数。串行下载一本 200 页要等很久，但并发太高又会被 CDN 限流。 */
+private const val PAGE_CONCURRENCY = 4
+
+/** 进度写库与通知刷新的最小间隔。逐页刷新会被系统限流，反而看不到进度。 */
+private const val PROGRESS_THROTTLE_MS = 500L
 
 class DownloadComicWorker(
     private val appContext: Context,
@@ -50,7 +62,15 @@ class DownloadComicWorker(
     private val localSettingManager: LocalSettingManager,
     private val comicRepository: ComicRepository,
     private val downloadToastAggregator: DownloadToastAggregator,
+    // 必须复用 DI 里配好的 ImageLoader：自行 new 的实例不带 coil/Config.kt 中的
+    // UA 与 Referer，会出现「在线能看、下载 403」这类难以排查的现象。
+    private val picImageLoader: ImageLoader,
 ) : CoroutineWorker(appContext, params) {
+
+    private val progressLock = Any()
+
+    @Volatile
+    private var lastProgressAt = 0L
 
     override suspend fun doWork(): Result {
         val comicId = inputData.getInt("comicId", -1)
@@ -106,13 +126,12 @@ class DownloadComicWorker(
         return withContext(Dispatchers.IO) {
             val coverUrl =
                 "${remoteSettingManager.remoteSettingState.value.imgHost}/media/albums/${coverOwnerId}_3x4.jpg"
-            val loader = ImageLoader(appContext)
             val request = ImageRequest.Builder(appContext)
                 .data(coverUrl)
                 .allowHardware(false)
                 .build()
 
-            when (val result = loader.execute(request)) {
+            when (val result = picImageLoader.execute(request)) {
                 is ErrorResult -> ""
                 is SuccessResult -> {
                     val bitmap = result.drawable.toBitmap()
@@ -137,69 +156,120 @@ class DownloadComicWorker(
                     }
 
                     val dir = getComicChapterDownloadDir(appContext, downloadTask)
-                    val loader = ImageLoader(appContext)
-                    var maxProgress = downloadComicDao.getById(comicId)?.progress ?: 0f
+                    val total = data.data.list.size
+                    val speedOwnerId = downloadTask.groupId.takeIf { it != 0 } ?: downloadTask.id
+                    val semaphore = Semaphore(PAGE_CONCURRENCY)
+                    val completed = AtomicInteger(0)
+                    // 组内其余章节的进度在一章之内不变，查一次即可
+                    val siblingProgress = otherChaptersProgress(downloadTask)
 
-                    data.data.list.mapIndexed { index, url ->
-                        val file = File(dir, "$index.webp")
-                        val nextProgress = (index + 1).toFloat() / data.data.list.size
-                        if (file.exists()) {
-                            val progress = updateChapterProgressIfAdvanced(
-                                downloadTask = downloadTask,
-                                currentMaxProgress = maxProgress,
-                                nextProgress = nextProgress
-                            )
-                            maxProgress = progress.chapterProgress
-                            showComicCacheNotification(downloadTask, progress.groupProgress)
-                            return@mapIndexed file.absolutePath
-                        }
-
-                        val imageState = ComicPicImageState(
-                            index = index,
-                            comicId = comicId,
-                            originSrc = url,
-                            __scrambleId = data.data.__scrambleId,
-                            __speed = data.data.__speed,
-                            picImageLoader = loader,
-                            __aId = data.data.__aId
-                        )
-                        try {
-                            withTimeout(DOWNLOAD_PAGE_TIMEOUT_MS) {
-                                imageState.decode(appContext)
-                            }
-                        } catch (e: Exception) {
-                            throw IllegalStateException("第 ${index + 1} 页下载或解码超时", e)
-                        }
-
-                        when (val result = imageState.imageResultState) {
-                            is ImageResultState.Success -> {
-                                FileOutputStream(file).use { out ->
-                                    result.decodeImageBitmap.asAndroidBitmap()
-                                        .compressWebpCompat(WEBP_QUALITY_DOWNLOAD, out)
+                    coroutineScope {
+                        data.data.list.mapIndexed { index, url ->
+                            async {
+                                semaphore.withPermit {
+                                    val path = downloadPage(
+                                        downloadTask = downloadTask,
+                                        dir = dir,
+                                        index = index,
+                                        url = url,
+                                        response = data.data,
+                                        speedOwnerId = speedOwnerId
+                                    )
+                                    reportProgress(
+                                        downloadTask = downloadTask,
+                                        done = completed.incrementAndGet(),
+                                        total = total,
+                                        siblingProgress = siblingProgress
+                                    )
+                                    path
                                 }
-                                DownloadSpeedTracker.addBytes(downloadTask.groupId.takeIf { it != 0 } ?: downloadTask.id, file.length())
-                                val progress = updateChapterProgressIfAdvanced(
-                                    downloadTask = downloadTask,
-                                    currentMaxProgress = maxProgress,
-                                    nextProgress = nextProgress
-                                )
-                                maxProgress = progress.chapterProgress
-                                showComicCacheNotification(downloadTask, progress.groupProgress)
-                                file.absolutePath
                             }
-
-                            is ImageResultState.Failure -> {
-                                throw IllegalStateException("第 ${index + 1} 页下载失败：${result.reason}")
-                            }
-
-                            ImageResultState.Loading -> {
-                                throw IllegalStateException("第 ${index + 1} 页仍在加载中")
-                            }
-                        }
+                        }.awaitAll()
                     }
                 }
             }
         }
+    }
+
+    private suspend fun downloadPage(
+        downloadTask: DownloadComic,
+        dir: File,
+        index: Int,
+        url: String,
+        response: ComicPicListResponse,
+        speedOwnerId: Int,
+    ): String {
+        val file = File(dir, "$index.webp")
+        if (file.exists()) return file.absolutePath
+
+        val imageState = ComicPicImageState(
+            index = index,
+            comicId = downloadTask.id,
+            originSrc = url,
+            __scrambleId = response.__scrambleId,
+            __speed = response.__speed,
+            picImageLoader = picImageLoader,
+            __aId = response.__aId
+        )
+        try {
+            withTimeout(DOWNLOAD_PAGE_TIMEOUT_MS) {
+                imageState.decode(appContext)
+            }
+        } catch (e: Exception) {
+            throw IllegalStateException("第 ${index + 1} 页下载或解码超时", e)
+        }
+
+        return when (val result = imageState.imageResultState) {
+            is ImageResultState.Success -> {
+                FileOutputStream(file).use { out ->
+                    result.decodeImageBitmap.asAndroidBitmap()
+                        .compressWebpCompat(WEBP_QUALITY_DOWNLOAD, out)
+                }
+                DownloadSpeedTracker.addBytes(speedOwnerId, file.length())
+                // 并发下载时若不及时放掉引用，会同时留着 PAGE_CONCURRENCY 张全图
+                imageState.release()
+                file.absolutePath
+            }
+
+            is ImageResultState.Failure -> {
+                throw IllegalStateException("第 ${index + 1} 页下载失败：${result.reason}")
+            }
+
+            ImageResultState.Loading -> {
+                throw IllegalStateException("第 ${index + 1} 页仍在加载中")
+            }
+        }
+    }
+
+    /**
+     * 汇报进度：按时间节流，避免每页都写库 + 发通知。
+     */
+    private suspend fun reportProgress(
+        downloadTask: DownloadComic,
+        done: Int,
+        total: Int,
+        siblingProgress: List<Float>,
+    ) {
+        val chapterProgress = (done.toFloat() / total).coerceIn(0f, 1f)
+        val now = System.currentTimeMillis()
+        val isLast = done >= total
+        synchronized(progressLock) {
+            if (!isLast && now - lastProgressAt < PROGRESS_THROTTLE_MS) return
+            lastProgressAt = now
+        }
+        downloadComicDao.updateProgress(UpdateComicProgress(downloadTask.id, chapterProgress))
+        val groupProgress = ((siblingProgress + chapterProgress).average())
+            .toFloat()
+            .coerceIn(0f, 1f)
+        showComicCacheNotification(downloadTask, groupProgress)
+    }
+
+    /** 同组其余章节各自的进度（本章除外），一章之内视作不变 */
+    private suspend fun otherChaptersProgress(downloadTask: DownloadComic): List<Float> {
+        val groupId = downloadTask.groupId.takeIf { it != 0 } ?: downloadTask.id
+        return downloadComicDao.getByGroupId(groupId)
+            .filter { it.id != downloadTask.id }
+            .map { if (it.status == "complete") 1f else it.progress.coerceIn(0f, 1f) }
     }
 
     private suspend fun writeCacheConfig(comicId: Int) {
@@ -215,21 +285,6 @@ class DownloadComicWorker(
         val chapterProgress = progress.coerceIn(0f, 1f)
         downloadComicDao.updateProgress(UpdateComicProgress(downloadTask.id, chapterProgress))
         return resolveGroupProgress(downloadTask, chapterProgress)
-    }
-
-    private suspend fun updateChapterProgressIfAdvanced(
-        downloadTask: DownloadComic,
-        currentMaxProgress: Float,
-        nextProgress: Float
-    ): DownloadProgress {
-        val chapterProgress = maxOf(currentMaxProgress, nextProgress.coerceIn(0f, 1f))
-        if (chapterProgress > currentMaxProgress) {
-            downloadComicDao.updateProgress(UpdateComicProgress(downloadTask.id, chapterProgress))
-        }
-        return DownloadProgress(
-            chapterProgress = chapterProgress,
-            groupProgress = resolveGroupProgress(downloadTask, chapterProgress)
-        )
     }
 
     private suspend fun resolveGroupProgress(downloadTask: DownloadComic, currentProgress: Float): Float {
@@ -277,8 +332,4 @@ class DownloadComicWorker(
         )
     }
 
-    private data class DownloadProgress(
-        val chapterProgress: Float,
-        val groupProgress: Float
-    )
 }

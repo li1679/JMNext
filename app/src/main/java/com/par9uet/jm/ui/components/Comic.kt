@@ -1,29 +1,27 @@
 package com.par9uet.jm.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.par9uet.jm.data.models.Comic
-import com.par9uet.jm.store.ToastManager
 import com.par9uet.jm.ui.screens.LocalMainNavController
 import com.par9uet.jm.ui.viewModel.ComicDetailViewModel
-import org.koin.compose.getKoin
 import org.koin.compose.viewmodel.koinActivityViewModel
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -38,66 +36,74 @@ fun Comic(
     comicDetailViewModel: ComicDetailViewModel = koinActivityViewModel()
 ) {
     val mainNavController = LocalMainNavController.current
-    val clipboardManager = LocalClipboardManager.current
-    val toastManager: ToastManager = getKoin().get()
 
-    Card(
-        modifier = modifier.combinedClickable(
-            onClick = {
-                if (editing && onToggleSelected != null) {
-                    onToggleSelected()
-                } else {
-                    comicDetailViewModel.reset(comic.id)
-                    mainNavController.navigate("comicDetail/${comic.id}")
+    // 封面自身就是卡片（圆角 + 轻阴影），不要再套一层 Card 容器：
+    // Card 的 surfaceContainerLow 与页面背景明度过于接近，边界看不见，
+    // 且封面底部的圆角会露出卡片底色形成豁口。
+    Column(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .combinedClickable(
+                onClick = {
+                    if (editing && onToggleSelected != null) {
+                        onToggleSelected()
+                    } else {
+                        comicDetailViewModel.reset(comic.id)
+                        mainNavController.navigate("comicDetail/${comic.id}")
+                    }
+                },
+                onLongClick = {
+                    onLongClick?.invoke()
                 }
-            },
-            onLongClick = {
-                onLongClick?.invoke()
-            }
-        ),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(
-            containerColor = if (editing && selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            },
-        ),
+            ),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Box {
-                ComicCoverImage(comic)
-                if (editing && selected) {
-                    Checkbox(
-                        checked = true,
-                        onCheckedChange = null,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(2.dp)
+        Box {
+            ComicCoverImage(
+                comic = comic,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(2.dp, MaterialTheme.shapes.medium)
+                    .then(
+                        if (editing && selected) {
+                            Modifier.border(
+                                width = 3.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = MaterialTheme.shapes.medium
+                            )
+                        } else {
+                            Modifier
+                        }
                     )
-                }
-            }
-            Text(
-                modifier = Modifier
-                    .padding(horizontal = 8.dp),
-                text = comic.name,
-                color = MaterialTheme.colorScheme.onSurface,
-                overflow = TextOverflow.Ellipsis,
-                maxLines = 1,
-                fontSize = 13.sp,
-                lineHeight = 16.sp,
             )
+            if (editing && selected) {
+                Checkbox(
+                    checked = true,
+                    onCheckedChange = null,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                )
+            }
+        }
+        Text(
+            text = comic.name,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            // minLines 与 maxLines 同为 2：漫画标题普遍很长且常带 [作者] 前缀，
+            // 一行放不下；固定两行可保证同一网格行的文字块等高。
+            maxLines = 2,
+            minLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        // 无作者时整行不渲染，避免出现占位文案
+        val author = comic.authorList.joinToString("、").takeIf { it.isNotBlank() }
+        if (author != null) {
             Text(
-                modifier = Modifier
-                    .padding(horizontal = 8.dp)
-                    .padding(bottom = 8.dp),
-                text = comic.authorList.joinToString(",").ifBlank { "暂无作者" },
+                text = author,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

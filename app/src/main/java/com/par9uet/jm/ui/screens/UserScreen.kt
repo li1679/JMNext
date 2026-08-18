@@ -383,7 +383,7 @@ fun UserScreen(
                 MenuDivider()
                 MenuItem(
                     icon = Icons.Default.History,
-                    label = "历史观看",
+                    label = "阅读历史",
                     onClick = {
                         checkLoginThenDo { mainNavController.navigate("userHistoryComic") }
                     }

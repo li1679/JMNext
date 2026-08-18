@@ -95,8 +95,8 @@ fun CacheCleanupScreen() {
                 CacheItem(
                     id = "download",
                     icon = Icons.Default.Folder,
-                    title = "漫画缓存",
-                    description = "已下载的漫画图片，清理后需重新下载",
+                    title = "已下载漫画",
+                    description = "离线阅读的漫画图片，删除后需要重新下载",
                     sizeBytes = downloadSize,
                     dir = downloadDir
                 )
@@ -135,7 +135,7 @@ fun CacheCleanupScreen() {
                     id = "total",
                     icon = Icons.Default.DeleteSweep,
                     title = "全部应用缓存",
-                    description = "包含以上所有缓存和其他临时文件",
+                    description = "图片、解码、PDF 等临时文件，不含已下载漫画",
                     sizeBytes = totalSize,
                     dir = totalAppCache
                 )

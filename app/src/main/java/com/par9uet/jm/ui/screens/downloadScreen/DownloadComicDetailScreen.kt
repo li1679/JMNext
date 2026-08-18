@@ -295,9 +295,7 @@ fun DownloadComicDetailScreen(
                             Text(
                                 text = it,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 18.sp,
-                                lineHeight = 27.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyMedium,
                             )
                         }
                     }

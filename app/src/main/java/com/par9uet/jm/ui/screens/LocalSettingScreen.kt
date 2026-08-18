@@ -36,7 +36,6 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Recommend
 import androidx.compose.material.icons.rounded.Source
 import androidx.compose.material.icons.rounded.Search
@@ -178,12 +177,6 @@ fun LocalSettingScreen(
                         openSetting(SettingType.LauncherDisguise)
                     }
                     SettingsSwitchRow(
-                        icon = Icons.Rounded.Psychology,
-                        title = "\u663e\u793a AI",
-                        value = localSetting.showAiEntry,
-                        onCheckedChange = localSettingManager::updateShowAiEntry
-                    )
-                    SettingsSwitchRow(
                         icon = Icons.Rounded.ContentPaste,
                         title = "\u526a\u5207\u677f\u81ea\u52a8\u68c0\u6d4b",
                         value = localSetting.clipboardAutoDetectEnabled,
@@ -273,27 +266,19 @@ fun LocalSettingScreen(
                     ) {
                         openSetting(SettingType.ReadTapMode)
                     }
-                    SettingsSwitchRow(
+                    SettingsRow(
                         icon = Icons.Rounded.Memory,
-                        title = "\u56fe\u7247\u5185\u5b58\u4f18\u5316",
-                        value = localSetting.readMemoryOptEnabled,
-                        onCheckedChange = { localSettingManager.updateReadMemoryOptEnabled(it) }
-                    )
-                    if (localSetting.readMemoryOptEnabled) {
-                        Text(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                            text = "\u5f00\u542f\u540e\u9650\u5236\u5e76\u53d1\u89e3\u7801\u6570\u5e76\u964d\u4f4e\u91c7\u6837\u7387\uff0c\u7f13\u89e3\u4f4e\u7aef\u8bbe\u5907 OOM\uff1b\u63a8\u8350\u503c 2",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        SettingsRow(
-                            icon = Icons.Rounded.Memory,
-                            title = "\u5e76\u53d1\u89e3\u7801\u6570",
-                            value = "\u63a8\u8350 ${localSetting.readDecodeConcurrency}"
-                        ) {
-                            openSetting(SettingType.ReadDecodeConcurrency)
-                        }
+                        title = "\u5e76\u53d1\u89e3\u7801\u6570",
+                        value = "${localSetting.readDecodeConcurrency}"
+                    ) {
+                        openSetting(SettingType.ReadDecodeConcurrency)
                     }
+                    Text(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        text = "\u540c\u65f6\u89e3\u7801\u7684\u56fe\u7247\u5f20\u6570\u3002\u8c03\u4f4e\u66f4\u7701\u5185\u5b58\u3001\u6eda\u52a8\u66f4\u7a33\uff0c\u8c03\u9ad8\u9884\u52a0\u8f7d\u66f4\u5feb\uff1b\u63a8\u8350 2",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             item {
@@ -319,9 +304,6 @@ fun LocalSettingScreen(
                     }
                     SettingsRow(Icons.Rounded.CloudSync, "\u6570\u636e\u5907\u4efd", "\u5907\u4efd\u4e0e\u6062\u590d\u5e94\u7528\u8bbe\u7f6e") {
                         mainNavController.navigate("backupRestore")
-                    }
-                    SettingsRow(Icons.Rounded.Psychology, "\u4eba\u683c\u9762\u5177", "\u81ea\u5b9a\u4e49 AI \u540d\u5b57\u3001\u804c\u4e1a\u3001\u7b80\u4ecb\u7b49") {
-                        mainNavController.navigate("personaManager")
                     }
                     SettingsRow(Icons.Rounded.SystemUpdate, "\u68c0\u67e5\u66f4\u65b0", "\u67e5\u770b GitHub Release \u6700\u65b0\u7248\u672c") {
                         mainNavController.navigate("checkUpdate")

@@ -3,7 +3,6 @@ package com.par9uet.jm.data.models
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -63,14 +62,23 @@ class ComicPicImageState(
 
     var imageResultState by mutableStateOf<ImageResultState>(ImageResultState.Loading)
 
-    suspend fun decode(context: Context, downscale: Boolean = false) {
+    /**
+     * 释放已解码的位图引用，把这一页退回未加载状态。
+     *
+     * 只丢引用，绝不调用 [Bitmap.recycle]：这张位图可能正被 Compose 绘制，
+     * 主动回收会触发 "trying to use a recycled bitmap" 崩溃。
+     */
+    fun release() {
+        imageResultState = ImageResultState.Loading
+    }
+
+    suspend fun decode(context: Context) {
         withContext(Dispatchers.Default) {
             imageResultState = ImageResultState.Loading
             try {
-                decodeImage(context, downscale)
+                decodeImage(context)
             } catch (e: OutOfMemoryError) {
-                logError("ComicPicImage", "解码图片 OOM: ${e.message}")
-                System.gc()
+                logError("ComicPicImage", "解码图片内存不足: ${e.message}")
                 imageResultState = ImageResultState.Failure("内存不足，无法解码图片")
             } catch (e: Exception) {
                 logError("ComicPicImage", "解码图片异常: ${e.stackTraceToString()}")
@@ -79,7 +87,7 @@ class ComicPicImageState(
         }
     }
 
-    private suspend fun decodeImage(context: Context, downscale: Boolean = false) {
+    private suspend fun decodeImage(context: Context) {
         val cacheDir = getCommonPicDecodeCacheDir(context, comicId)
         if (!cacheDir.exists()) {
             cacheDir.mkdirs()
@@ -87,18 +95,14 @@ class ComicPicImageState(
         val page = extractPageFromUrl()
         // GIF 与服务端标记 speed=1 的图不做解扰，其余由 aid/scrambleId 决定分块数
         val seed = if (isGif() || __speed == "1") 0 else calculateSeed(page)
-        // 缓存文件名带上分块数指纹：解扰参数一旦变化，旧缓存自动失效而不会被误当作成品复用。
-        // 这是「同一本有时错版有时正常」的根因——之前的缓存键只有页码，一次错误解码会被永久沿用。
+        // 缓存文件名必须带上分块数指纹：解扰参数变化时旧缓存要自动失效，
+        // 否则一次错误解码的结果会被当作成品长期复用，表现为「同一本有时错版」。
         val cacheFile = File(cacheDir, "${page}_s$seed.webp")
 
-        // 检查缓存文件是否存在
         if (cacheFile.exists()) {
             try {
-                val options = if (downscale) {
-                    BitmapFactory.Options().apply { inSampleSize = 2 }
-                } else null
                 val decodeImageBitmap =
-                    BitmapFactory.decodeFile(cacheFile.absolutePath, options)?.asImageBitmap()
+                    BitmapFactory.decodeFile(cacheFile.absolutePath)?.asImageBitmap()
                         ?: run {
                             cacheFile.delete()
                             throw IllegalStateException("缓存图片解码为空")
@@ -113,7 +117,6 @@ class ComicPicImageState(
             }
         }
 
-        // 加载原始图片
         val imageData = File(originSrc).takeIf { it.exists() } ?: originSrc
         val request = ImageRequest.Builder(context)
             .data(imageData)
@@ -137,18 +140,14 @@ class ComicPicImageState(
                 }
                 if (fetchedBytes != null) {
                     try {
-                        val options = if (downscale) {
-                            BitmapFactory.Options().apply { inSampleSize = 2 }
-                        } else null
                         val originalBitmap = BitmapFactory
-                            .decodeByteArray(fetchedBytes, 0, fetchedBytes.size, options)
+                            .decodeByteArray(fetchedBytes, 0, fetchedBytes.size)
                         if (originalBitmap != null) {
                             imageResultState = processBitmap(originalBitmap, seed, cacheFile)
                             return
                         }
                     } catch (e: OutOfMemoryError) {
-                        logError("ComicPicImage", "内置API图片解码 OOM: ${e.message}")
-                        System.gc()
+                        logError("ComicPicImage", "内置API图片解码内存不足: ${e.message}")
                         imageResultState = ImageResultState.Failure("内存不足")
                         return
                     } catch (e: Exception) {
@@ -175,13 +174,14 @@ class ComicPicImageState(
             val finalBitmap = if (seed == 0) {
                 originalBitmap
             } else {
-                decodeBitmap(originalBitmap, seed)
+                // 解扰产出同尺寸新位图，原图随即无人引用。
+                // 这是链路上唯一能确定原图已无用的位置，不回收则峰值翻倍。
+                decodeBitmap(originalBitmap, seed).also { originalBitmap.recycle() }
             }
             saveBitmapAsWebp(finalBitmap, cacheFile)
             ImageResultState.Success(finalBitmap.asImageBitmap(), aspectRatio)
         } catch (e: OutOfMemoryError) {
-            logError("ComicPicImage", "图片处理 OOM: ${e.message}")
-            System.gc()
+            logError("ComicPicImage", "图片处理内存不足: ${e.message}")
             ImageResultState.Failure("内存不足")
         } catch (e: Exception) {
             logError("ComicPicImage", "图片处理失败: ${e.stackTraceToString()}")

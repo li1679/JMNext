@@ -11,12 +11,7 @@ import com.par9uet.jm.navigation.LocalMainNavController
 import com.par9uet.jm.core.designsystem.theme.ColorFamily
 import com.par9uet.jm.core.designsystem.theme.ExtendedTheme
 
-/**
- * 可点击跳搜索的标签 chip。
- *
- * 描边而非填色：详情页一次会铺开十几个标签，实心色块连成一片会盖过封面
- * 和标题。三类标签的配色现已统一为中性（见 extendedColorSchemeFor）。
- */
+/** 可点击跳搜索的标签 chip。描边而非填色：详情页一次铺开十几个，实心色块会连成一片盖过封面。 */
 @Composable
 private fun ComicTag(label: String, family: ColorFamily) {
     val mainNavController = LocalMainNavController.current

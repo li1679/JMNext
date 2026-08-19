@@ -16,11 +16,10 @@ data class LogEntry(
 object LogBuffer {
     private const val MAX_ENTRIES = 500
 
-    // ArrayDeque：环形缓冲满后每次追加都要移除最老一条，
-    // ArrayList.removeAt(0) 是 O(n)，而日志在解码等热路径上高频调用
+    // ArrayDeque：日志在解码热路径上高频调用，ArrayList.removeAt(0) 是 O(n)
     private val entries = ArrayDeque<LogEntry>(MAX_ENTRIES)
 
-    // 使用 SimpleDateFormat 替代 java.time，确保 Android 6 兼容性
+    // SimpleDateFormat 而非 java.time：兼容 Android 6
     private val dateFormatter = SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault())
 
     @Synchronized

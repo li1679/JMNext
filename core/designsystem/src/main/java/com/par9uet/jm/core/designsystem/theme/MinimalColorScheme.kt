@@ -6,20 +6,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
 /**
- * 极简白：手写的中性色板。
- *
- * 不走种子色推导。material-kolor 的 TonalSpot 会往中性色板注入彩度，
- * background / surface / surfaceContainer 全都会带一层色调，看上去是
- * 「染了色的白」而不是纯白。要精确落到指定灰阶只能直接给值。
- *
- * 两条约定：
- * - 强调色用深灰而非彩色，颜色只在按钮、选中态这类必要处承担功能；
- * - error 保留红色。删除、取消收藏这类破坏性操作需要靠颜色警示，
- *   全灰会让人误点。
- *
- * surfaceTint 特意设成与 surface 同色：M3 的 tonalElevation 靠 surfaceTint
- * 染色来表达层级，若保留默认值，任何抬升的容器都会重新染上主色调。
- * 层级改由留白和描边表达。
+ * 极简白：手写中性色板，不走种子推导——material-kolor 的 TonalSpot 会给中性色板注入彩度。
+ * error 保留红色：破坏性操作需要颜色警示。
+ * surfaceTint 与 surface 同色：M3 靠它给 tonalElevation 染色，用默认值会让抬升容器染上主色。
  */
 val MinimalLightColorScheme: ColorScheme = lightColorScheme(
     primary = Color(0xFF2B2B2B),

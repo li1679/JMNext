@@ -19,20 +19,6 @@ data class CommentListResponse(
         val update_at: String?,
         val addtime: String?,
         val parent_CID: String?,
-        // 等级相关，这里不写，没啥意义
-//        expinfo: {
-//        level_name: string
-//        level: number
-//        nextLevelExp: number
-//        exp: string
-//        expPercent: number // 100
-//        uid: string
-//        badges: Array<{
-//            content: string
-//            name: string
-//            id: string
-//        }>
-//    }
         val name: String?,
         val content: String?,
         val photo: String?,

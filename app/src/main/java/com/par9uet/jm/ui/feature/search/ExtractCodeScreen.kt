@@ -223,12 +223,10 @@ fun ExtractCodeScreen(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // JM 编码
                         AssistChip(
                             onClick = {},
                             label = { Text("JM${comic.id}") }
                         )
-                        // 标题
                         Text(
                             text = comic.name,
                             style = MaterialTheme.typography.titleSmall,
@@ -236,7 +234,6 @@ fun ExtractCodeScreen(
                             maxLines = 2,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
-                        // 作者
                         if (comic.authorList.isNotEmpty()) {
                             Text(
                                 text = "作者：${comic.authorList.joinToString("、")}",
@@ -246,7 +243,6 @@ fun ExtractCodeScreen(
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         }
-                        // 标签
                         if (comic.tagList.isNotEmpty()) {
                             Text(
                                 text = "标签：${comic.tagList.take(10).joinToString("、")}",

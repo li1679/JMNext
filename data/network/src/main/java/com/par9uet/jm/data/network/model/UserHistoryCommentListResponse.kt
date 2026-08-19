@@ -19,20 +19,6 @@ data class UserHistoryCommentListResponse(
         val update_at: String? = null,
         val addtime: String? = null,
         val parent_CID: String? = null,
-        // 等级相关，这里不写，没啥意义
-//        expinfo: {
-//        level_name: string
-//        level: number
-//        nextLevelExp: number
-//        exp: string
-//        expPercent: number // 100
-//        uid: string
-//        badges: Array<{
-//            content: string
-//            name: string
-//            id: string
-//        }>
-//    }
         val name: String? = null,
         val content: String? = null,
         val photo: String? = null,

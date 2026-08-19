@@ -72,7 +72,6 @@ fun AppLockSettingScreen(
         derivedStateOf { hasPassword || hasPattern }
     }
 
-    // 弹窗状态
     var showPasswordLengthDialog by remember { mutableStateOf(false) }
     var showSetPasswordDialog by remember { mutableStateOf(false) }
     var showSetPatternDialog by remember { mutableStateOf(false) }
@@ -116,7 +115,6 @@ fun AppLockSettingScreen(
             // Section 1: 设置解锁方式
             item {
                 SettingsSection(title = "设置解锁方式") {
-                    // 密码开关
                     SettingsSwitchRow(
                         icon = Icons.Rounded.Key,
                         title = "密码",
@@ -142,7 +140,6 @@ fun AppLockSettingScreen(
                             showPasswordLengthDialog = true
                         }
                     }
-                    // 图案锁开关
                     SettingsSwitchRow(
                         icon = Icons.Rounded.Gesture,
                         title = "图案锁",

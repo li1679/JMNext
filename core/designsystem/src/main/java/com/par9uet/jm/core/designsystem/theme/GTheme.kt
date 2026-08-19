@@ -48,14 +48,8 @@ object ExtendedTheme {
 }
 
 /**
- * 各配色预设的种子色。
- *
- * 一个种子即可：整套 ColorScheme（含 surface / background / outline / scrim 等
- * 全部 role）都由它经 HCT 色调板推导，不要退回手工逐个覆盖强调色——
- * 那样 surface 系列不会跟着变，各预设的整体观感会趋同。
- *
- * 默认预设不在此列：它是手写的中性色板（[MinimalLightColorScheme]），
- * 种子推导做不到真正无彩的 surface。
+ * 各预设的种子色。整套 ColorScheme 由种子经 HCT 推导，不要手工逐个覆盖强调色，
+ * 否则 surface 系列不跟着变、各预设观感趋同。默认预设走手写中性板，不在此列。
  */
 private val PRESET_SEEDS: Map<String, Color> = mapOf(
     COLOR_PALETTE_PRESET_OCEAN to Color(0xFF00696D),

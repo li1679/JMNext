@@ -56,12 +56,9 @@ fun getComicConfigFile(context: Context, comic: DownloadComic): File {
 }
 
 /**
- * 章节目录名。
- *
- * 必须带上章节 id：章节名可能为空（一律回退成「单篇」）或在同一本书里重复，
- * 只用名字会让多个章节落到同一个物理目录，而页面文件名又是 0.webp/1.webp…，
- * 后下载的章节会覆盖前一章、页数多出来的部分则残留上一章的图，
- * 表现为「几章内容掺杂在一起」。章节 id 唯一，能彻底避免这种碰撞。
+ * 章节目录名，必须带章节 id。
+ * 章节名可能为空或在同一本书内重复，仅用名字会让多章落到同一目录，
+ * 而页面文件名是 0.webp/1.webp…，后写入的章节会覆盖前一章，表现为几章内容掺杂。
  */
 fun getChapterCacheName(comic: DownloadComic): String {
     return "${getLegacyChapterCacheName(comic)}_${comic.id}"

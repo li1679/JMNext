@@ -51,10 +51,8 @@ import org.koin.compose.viewmodel.koinActivityViewModel
 private const val SPLASH_MIN_VISIBLE_MS = 400L
 
 /**
- * 从剪贴板文本里识别漫画编码。
- *
- * 要求形式明确：带 JM 前缀，或整串本身就是纯数字。
- * 不能抽取任意文本里的全部数字再拼接——「2024年10月」「订单号」都会误命中。
+ * 从剪贴板识别漫画编码：须带 JM 前缀或整串为纯数字。
+ * 不可抽取任意文本里的数字再拼接——「2024年10月」「订单号」都会误命中。
  */
 private val JM_CODE_REGEX = Regex("""(?i)JM[\s:：]*(\d{3,12})""")
 

@@ -135,7 +135,6 @@ fun ComicScrollRead(
                         if (up != null && !up.isConsumed) {
                             val distance = (up.position - down.position).getDistance()
                             if (distance < 10.dp.toPx()) {
-                                // --- 获取点击位置 ---
                                 val screenHeight = size.height
                                 val screenWidth = size.width
                                 val clickY = up.position.y

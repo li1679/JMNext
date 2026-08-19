@@ -62,7 +62,6 @@ fun LogViewerScreen() {
 
     CommonScaffold(title = "日志") {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Action bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -103,7 +102,6 @@ fun LogViewerScreen() {
                 }
             }
 
-            // Log list
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()

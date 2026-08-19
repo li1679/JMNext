@@ -44,13 +44,9 @@ class ComicViewModel(
     private var loadedApiSource: String? = null
 
     /**
-     * 首页数据的按需加载。
-     *
-     * 首页是 Tab 页，导航到别处再返回时 NavHost 会重建这个 composable，
-     * 伴随的 LaunchedEffect 也会重跑。若在那里直接请求网络，用户每次从
-     * 详情页、收藏、签到等页面退回来都会看到首页整个重刷一遍。
-     * 因此这里只在「还没加载成功」或「数据源确实变了」时才发请求，
-     * 其余情况直接复用已有数据；主动刷新走 [refreshHomeComic]。
+     * 按需加载。首页是 Tab 页，导航返回时 NavHost 会重建 composable 并重跑 LaunchedEffect，
+     * 在那里直接请求会让每次退回首页都整页重刷。仅在未加载成功或数据源变更时发请求，
+     * 主动刷新走 [refreshHomeComic]。
      */
     fun ensureHomeComic(apiSource: String) {
         if (loadedApiSource == apiSource && _homeComicState.value.list.isNotEmpty()) return

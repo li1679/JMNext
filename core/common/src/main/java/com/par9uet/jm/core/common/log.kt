@@ -2,13 +2,7 @@ package com.par9uet.jm.core.common
 
 import android.util.Log
 
-/**
- * 日志。
- *
- * logcat 输出只在 debug 构建生效：release 下它是纯开销，而且这些日志
- * 会带上 URL、漫画 id 等信息。应用内的「日志查看」是个正式功能，
- * 因此 LogBuffer 两种构建都保留。
- */
+/** logcat 输出仅 debug 生效（release 下会带出 URL 与漫画 id）；LogBuffer 两种构建都保留，供应用内「日志查看」使用。 */
 inline fun <reified T> T.log(msg: String) {
     val tag = T::class.java.simpleName
     writeLog(tag, msg)

@@ -476,7 +476,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPattern(
     val lineColor = if (isError) errorColor else accent
     val dotFillColor = if (isError) errorColor else accent
 
-    // 连接线
     if (selectedDots.isNotEmpty()) {
         for (i in 0 until selectedDots.size - 1) {
             val start = centers[selectedDots[i]]
@@ -500,7 +499,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPattern(
         }
     }
 
-    // 绘制 9 个点
     for (index in 0..8) {
         val center = centers[index]
         val selected = index in selectedDots

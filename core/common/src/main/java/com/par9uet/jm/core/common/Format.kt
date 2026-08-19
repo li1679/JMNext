@@ -2,12 +2,7 @@ package com.par9uet.jm.core.common
 
 import kotlin.math.roundToInt
 
-/**
- * 字节数格式化。
- *
- * 原先在 PDF 导出与应用更新下载两处各有一份实现，输出格式还略有出入
- * （同一个大小在两个页面上显示不一致）。统一收敛到这里。
- */
+/** 字节数格式化。全局唯一实现，勿再各处自行拼装，否则同一数值在不同页面显示不一致。 */
 fun formatBytes(bytes: Long): String {
     if (bytes <= 0L) return "0 B"
     val units = listOf("B", "KB", "MB", "GB")

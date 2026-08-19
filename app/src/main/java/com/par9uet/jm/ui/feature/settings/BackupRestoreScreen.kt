@@ -114,7 +114,6 @@ fun BackupRestoreScreen(
     val remoteSetting by remoteSettingManager.remoteSettingState.collectAsState()
     val backupManager = remember { BackupManager() }
 
-    // 备份流程状态
     var backupStep by remember { mutableStateOf(BackupStep.None) }
     var contentOptions by remember { mutableStateOf(BackupContentOptions()) }
     var pendingProtectionType by remember { mutableStateOf(BACKUP_PROTECTION_NONE) }
@@ -124,7 +123,6 @@ fun BackupRestoreScreen(
     // 缓存备份在内存中暂存，等待写入文件时一起打包
     var pendingComicCacheBackup by remember { mutableStateOf<ComicCacheBackup?>(null) }
 
-    // 恢复流程状态
     var restoreBackup by remember { mutableStateOf<BackupFile?>(null) }
     var restoreStep by remember { mutableStateOf(RestoreStep.None) }
     // 恢复时用户选择的内容选项
@@ -314,7 +312,6 @@ fun BackupRestoreScreen(
             }
         }
 
-        // ============== 备份流程 ==============
 
         // 步骤 1：选择备份内容
         if (backupStep == BackupStep.SelectContent) {
@@ -414,9 +411,7 @@ fun BackupRestoreScreen(
             )
         }
 
-        // ============== 恢复流程 ==============
 
-        // 核验密码
         if (restoreStep == RestoreStep.VerifyPassword) {
             val backup = restoreBackup
             if (backup != null) {
@@ -435,7 +430,6 @@ fun BackupRestoreScreen(
             }
         }
 
-        // 核验图案
         if (restoreStep == RestoreStep.VerifyPattern) {
             val backup = restoreBackup
             if (backup != null) {
@@ -948,7 +942,6 @@ private fun ComicCacheRestoreDialog(
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 标题
                 Text(
                     text = "恢复缓存目录",
                     style = MaterialTheme.typography.headlineSmall,
@@ -980,7 +973,6 @@ private fun ComicCacheRestoreDialog(
                     }
                 }
 
-                // 漫画列表
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1004,7 +996,6 @@ private fun ComicCacheRestoreDialog(
                     }
                 }
 
-                // 底部操作栏
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -1053,7 +1044,6 @@ private fun ComicRestoreRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 左侧缩略图
             Box(
                 modifier = Modifier
                     .size(52.dp, 70.dp)
@@ -1093,7 +1083,6 @@ private fun ComicRestoreRow(
                     else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            // 右侧勾选图标
             Icon(
                 imageVector = if (checked) Icons.Rounded.CheckCircle else Icons.Rounded.Circle,
                 contentDescription = null,

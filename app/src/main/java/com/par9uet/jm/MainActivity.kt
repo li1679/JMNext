@@ -24,14 +24,10 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 在 super.onCreate() 之前按应用主题选择启动窗口背景。
-     *
-     * 启动窗口背景由系统在 Compose 画出第一帧前显示。若只靠 values-night，
-     * 跟的是系统深浅色，而应用主题是用户选的 light / dark / auto——
-     * 两者不一致时冷启动会闪白。
-     *
-     * 主题设置存在加密 SharedPreferences 里，此刻解密取值代价过大，
-     * 因此由 AppTheme 解析出深浅色后额外写一份明文标记供这里读取。
+     * 在 super.onCreate() 前按应用主题选定启动窗口背景。
+     * 只靠 values-night 跟的是系统深浅色，而应用主题是用户选的 light/dark/auto，
+     * 两者不一致时冷启动会闪白。主题存在加密 prefs 里，此刻解密代价过大，
+     * 故由 AppTheme 另写一份明文标记供这里读取。
      */
     private fun applyLaunchTheme() {
         val prefs = getSharedPreferences(LAUNCH_THEME_PREFS, Context.MODE_PRIVATE)

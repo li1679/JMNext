@@ -11,11 +11,8 @@ import okhttp3.Response
 import java.io.IOException
 
 /**
- * 把占位 baseUrl 替换成用户实际选用的 API 线路。
- *
- * 禁漫的 CDN 域名寿命很短，单一域名一旦失效整个应用都不可用，
- * 因此这里会在当前线路失败时依次回退到设置里的其它候选线路，
- * 并记住最后一个可用的线路，避免每次请求都从已失效的域名开始试探。
+ * 把占位 baseUrl 替换成用户选用的 API 线路。
+ * CDN 域名寿命很短，失效时依次回退到候选线路，并记住最后可用的一条。
  */
 class BaseUrlInterceptor(
     private val localSettingManager: LocalSettingManager
@@ -66,9 +63,7 @@ class BaseUrlInterceptor(
         throw lastFailure ?: IOException("所有 API 线路均不可用")
     }
 
-    /**
-     * 候选线路：优先用上次成功的线路，然后是用户当前选中的，最后是设置里的其余线路。
-     */
+    /** 候选线路：上次成功的 > 当前选中的 > 设置里其余的 */
     private fun buildCandidates(): List<String> {
         val setting = localSettingManager.localSettingState.value
         return listOfNotNull(preferredBaseUrl, setting.api)

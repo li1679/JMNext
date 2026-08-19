@@ -191,12 +191,10 @@ fun UserCollectComicScreen(
         userViewModel.ensureCollectMeta()
     }
 
-    // 主体内容：搜索栏 + 收藏夹 Chip + 排序 + 漫画网格
     val mainContent: @Composable () -> Unit = {
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // 顶部搜索栏 + 筛选按钮
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -676,7 +674,6 @@ private fun FilterDialog(
                 .padding(horizontal = 20.dp)
                 .navigationBarsPadding()
         ) {
-            // 标题
             Text(
                 text = "筛选收藏",
                 style = MaterialTheme.typography.headlineSmall,
@@ -740,7 +737,6 @@ private fun FilterDialog(
                 )
             )
             Spacer(modifier = Modifier.height(12.dp))
-            // Tab 行
             PrimaryTabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -762,7 +758,6 @@ private fun FilterDialog(
                     text = { Text("作者 (${authorCountMap.size})") }
                 )
             }
-            // 内容区：可滚动，填满剩余空间
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

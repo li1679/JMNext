@@ -10,14 +10,11 @@ import okhttp3.Cookie
 import java.time.Duration
 
 /**
- * 共享内置 API 客户端管理器。
- * 确保 UserRepositoryImpl 和 ComicRepositoryImpl 使用同一个 JmApiClient 实例，
- * 这样 login() 设置的 loggedInUserName 和内部 Cookie 状态可以被所有 Repository 共享。
- * 解决内置 API 模式下 POST 请求（如创建收藏夹）返回 401 "請先登入會員" 的问题。
+ * 共享的 JmApiClient 实例：login() 写入的登录态与 Cookie 需被所有 Repository 看到，
+ * 否则内置 API 模式下 POST（如创建收藏夹）会返回 401。
  *
- * Android 6 兼容：JmDomainManager 的域名探活使用 CompletableFuture.runAsync（ForkJoinPool），
- * 在 Android 6 上可能初始化失败导致 blockUntilInitialized 永久阻塞。
- * 此处在创建客户端后启动守护线程，超时后强制解除阻塞。
+ * Android 6 兼容：JmDomainManager 域名探活走 ForkJoinPool，在 Android 6 上可能初始化失败
+ * 导致 blockUntilInitialized 永久阻塞，故用守护线程超时解除。
  */
 class EmbeddedClientManager(
     private val cookieStorage: CookieStorage,
@@ -80,7 +77,6 @@ class EmbeddedClientManager(
                     domainManager.setInitialized(true)
                 }
             } catch (e: InterruptedException) {
-                // 忽略
             }
         }, "embedded-domain-init-guard").apply {
             isDaemon = true

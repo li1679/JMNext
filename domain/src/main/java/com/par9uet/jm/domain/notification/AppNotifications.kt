@@ -13,13 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 
-/**
- * 通知使用的小图标。
- *
- * 图标资源属于 `:app`（随图标伪装一起维护），而发通知的调用方在服务层，
- * 下层拿不到上层的 `R`。因此由 `:app` 在启动时注入一次资源 id。
- * 未注入时回落到系统下载图标，保证通知仍能发出。
- */
+/** 通知小图标。图标资源属于 :app，服务层拿不到上层的 R，故由 :app 启动时注入；未注入时用系统图标兜底。 */
 object NotificationIcon {
     @Volatile
     private var resId: Int = 0
@@ -62,10 +56,7 @@ fun ensureAppNotificationChannels(context: Context) {
     manager.createNotificationChannel(updateChannel)
 }
 
-/**
- * 下载完成通知：点击后打开 MainActivity 并携带 [EXTRA_NAVIGATE_ROUTE] = checkUpdate，
- * 由 AppScreen 读取后导航到检查更新页面。
- */
+/** 下载完成通知：点击打开应用并携带 [EXTRA_NAVIGATE_ROUTE]，由导航图读取后跳转 */
 @SuppressLint("MissingPermission")
 fun showUpdateDownloadedNotification(
     context: Context,

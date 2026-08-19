@@ -147,7 +147,6 @@ fun LoadingScreen() {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 应用名称
                 Text(
                     text = stringResource(R.string.app_name),
                     style = MaterialTheme.typography.headlineSmall,

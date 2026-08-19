@@ -327,7 +327,6 @@ fun SignInScreen(
                             }
                         }
 
-                        // 签到按钮
                         val todayDayOfMonth = today.dayOfMonth
                         val isTodaySigned = signDataState.data?.dateMap?.get(todayDayOfMonth)?.isSign == true
                         Button(

@@ -10,11 +10,7 @@ import com.par9uet.jm.ui.feature.user.UserViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
-/**
- * 界面层：只注册 ViewModel。
- * 其余对象由各自所属模块注册（见 commonModule / storageModule / networkModule /
- * databaseModule / repositoryModule / domainModule），在 [com.par9uet.jm.JmApplication] 汇总。
- */
+/** 界面层只注册 ViewModel，其余对象由各自模块注册，在 JmApplication 汇总。 */
 val appModule = module {
     viewModel { GlobalViewModel(getAll(), get()) }
     viewModel { ComicViewModel(get(), get()) }

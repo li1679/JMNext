@@ -151,7 +151,6 @@ fun LoginScreen(
                         modifier = Modifier.size(96.dp)
                     )
 
-                    // 标题区
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -206,7 +205,6 @@ fun LoginScreen(
                         )
                     }
 
-                    // 错误信息
                     val errorMessage = loginState.errorMsg.orEmpty()
                     if (loginState.isError && errorMessage.isNotBlank()) {
                         Text(

@@ -6,12 +6,8 @@ import okhttp3.Interceptor
 import okhttp3.Response
 
 /**
- * 统一处理 HTTP 层失败的提示。
- *
- * 所有失败都会写入日志（可在「日志查看」中回溯，含具体 URL），
- * 但只有用户真正能据此做出反应的错误才弹提示：
- * 之前对每个非 2xx 响应都无条件弹窗，一条线路失效就会刷出成片的
- * 「网络错误: 404」。提示的去重节流由 ToastManager 统一负责。
+ * HTTP 失败一律写日志（「日志查看」含具体 URL），但只有用户能据此反应的错误才弹提示。
+ * 对每个非 2xx 都弹窗会在线路失效时刷屏。去重节流由 ToastManager 负责。
  */
 class ToastInterceptor(
     private val toastManager: ToastManager
@@ -31,9 +27,7 @@ class ToastInterceptor(
         return response
     }
 
-    /**
-     * 把状态码翻译成用户看得懂的说明；返回 null 表示这个错误只记日志、不打扰用户。
-     */
+    /** 返回 null 表示只记日志、不打扰用户 */
     private fun describe(code: Int): String? = when (code) {
         // 线路失效或接口路径变动，已有自动换线路兜底，弹出来用户也无从处理
         404 -> null

@@ -71,22 +71,7 @@ import com.par9uet.jm.ui.feature.user.UserViewModel
 import org.koin.compose.getKoin
 import org.koin.compose.viewmodel.koinActivityViewModel
 
-/**
- * 首次启动引导页
- *
- * 引导步骤：
- * 0. 欢迎介绍
- * 1. NSFW 内容警告
- * 2. 数据源说明
- * 3. 通知权限授予
- * 4. 应用锁设置（可跳过）
- * 5. AI 开关（声明 unlimitedai，无道德审查）
- * 6. 提取编码 + 剪切板自动检测
- * 7. 登录账号（可跳过）
- * 8. 若已登录：偏好推荐开关（声明请求网络 API，可能不稳定）
- *
- * 右上角随时可跳过整个引导。
- */
+/** 首次启动引导。步骤见下方 when(step) 分支，右上角可随时跳过。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WelcomeScreen(

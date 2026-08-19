@@ -45,14 +45,9 @@ private fun currentTabRoute(navController: NavHostController): String? {
 }
 
 /**
- * 切换主 Tab。
- *
- * 三个参数缺一不可：
- * - `saveState` / `restoreState`：不带的话，每次切走都会销毁该页，切回来是全新的一份，
- *   首页的滚动位置、分类选中项、已加载的列表全部要从头再来；
- * - `popUpTo` 起始页：否则「首页→收藏→首页→收藏」会一路往返回栈里堆，
- *   退出应用得连按好几次返回键；
- * - `launchSingleTop`：重复点当前 Tab 不再入栈。
+ * 切换主 Tab，三个参数缺一不可：
+ * saveState/restoreState 保住各 Tab 的滚动位置与已加载数据；
+ * popUpTo 起始页避免来回切换把返回栈堆满；launchSingleTop 防止重复入栈。
  */
 private fun NavHostController.switchTab(route: String) {
     navigate(route) {

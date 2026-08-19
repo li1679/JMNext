@@ -7,12 +7,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
-/**
- * 全局提示。
- *
- * 内置去重节流：并发请求同时失败时（例如一条 API 线路整体失效），
- * 相同内容的提示会被反复触发，不加节流会在界面上刷成一片。
- */
+/** 全局提示。内置去重节流：线路整体失效时相同提示会被反复触发，不节流会刷屏。 */
 class ToastManager {
     companion object {
         /** 同一条提示的最小间隔 */

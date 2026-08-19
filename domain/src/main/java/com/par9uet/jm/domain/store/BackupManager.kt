@@ -10,7 +10,6 @@ import com.par9uet.jm.core.model.LocalSetting
 import com.par9uet.jm.core.common.logError
 import java.security.MessageDigest
 
-// 备份保护方式
 const val BACKUP_PROTECTION_NONE = "none"
 const val BACKUP_PROTECTION_PASSWORD = "password"
 const val BACKUP_PROTECTION_PATTERN = "pattern"
@@ -19,9 +18,7 @@ const val BACKUP_PROTECTION_BOTH = "both"
 // 备份文件格式版本（v1 旧格式仅 LocalSetting；v2 多内容格式；v3 新增缓存目录备份）
 const val BACKUP_FORMAT_VERSION = 3
 
-/**
- * 用户选择要备份的内容类型。
- */
+/** 用户选择要备份的内容类型 */
 data class BackupContentOptions(
     val includeLocalSetting: Boolean = true,
     val includeComicCache: Boolean = false,
@@ -29,9 +26,7 @@ data class BackupContentOptions(
     val isEmpty: Boolean get() = !includeLocalSetting && !includeComicCache
 }
 
-/**
- * 备份文件元信息：包含版本、时间戳、保护方式与备份内容标记。
- */
+/** 备份元信息：版本、时间戳、保护方式与内容标记 */
 data class BackupMeta(
     val version: Int = BACKUP_FORMAT_VERSION,
     val timestamp: Long = System.currentTimeMillis(),
@@ -43,20 +38,14 @@ data class BackupMeta(
     val comicCacheCount: Int = 0,
 )
 
-/**
- * 缓存目录备份：单个章节的信息。
- * 不包含图片文件，只保留章节 ID（即漫画 ID）和排序信息。
- */
+/** 缓存目录备份：单章信息，不含图片文件 */
 data class ChapterBackup(
     val id: Int,
     val name: String,
     val sortOrder: Long,
 )
 
-/**
- * 缓存目录备份：一个漫画组的信息。
- * 多章节漫画会包含多个 ChapterBackup；单篇漫画 chapters 列表只有一个元素（id 与 groupId 相同）。
- */
+/** 缓存目录备份：一组漫画。单篇漫画的 chapters 只有一个元素（id 与 groupId 相同） */
 data class ComicGroupBackup(
     val id: Int,
     val name: String,

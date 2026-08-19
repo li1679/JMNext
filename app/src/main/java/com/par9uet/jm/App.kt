@@ -32,17 +32,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.compose.rememberNavController
-import com.par9uet.jm.store.InitManager
-import com.par9uet.jm.store.LocalSettingManager
-import com.par9uet.jm.store.ToastManager
-import com.par9uet.jm.store.UserManager
-import com.par9uet.jm.ui.screens.AppLockScreen
-import com.par9uet.jm.ui.screens.AppScreen
-import com.par9uet.jm.ui.screens.LoadingScreen
-import com.par9uet.jm.ui.screens.NsfwWarningDialog
-import com.par9uet.jm.ui.screens.WelcomeScreen
-import com.par9uet.jm.ui.viewModel.GlobalViewModel
-import com.par9uet.jm.ui.viewModel.UserViewModel
+import com.par9uet.jm.core.common.InitManager
+import com.par9uet.jm.data.storage.LocalSettingManager
+import com.par9uet.jm.core.common.ToastManager
+import com.par9uet.jm.domain.store.UserManager
+import com.par9uet.jm.ui.feature.settings.AppLockScreen
+import com.par9uet.jm.navigation.AppScreen
+import com.par9uet.jm.ui.feature.shared.LoadingScreen
+import com.par9uet.jm.ui.feature.shared.NsfwWarningDialog
+import com.par9uet.jm.ui.feature.user.WelcomeScreen
+import com.par9uet.jm.ui.feature.shared.GlobalViewModel
+import com.par9uet.jm.ui.feature.user.UserViewModel
 import kotlinx.coroutines.flow.first
 import org.koin.compose.getKoin
 import org.koin.compose.viewmodel.koinActivityViewModel
@@ -73,7 +73,7 @@ fun App(
     localSettingManager: LocalSettingManager = getKoin().get(),
     initManager: InitManager = getKoin().get(),
     userManager: UserManager = getKoin().get(),
-    remoteSettingManager: com.par9uet.jm.store.RemoteSettingManager = getKoin().get(),
+    remoteSettingManager: com.par9uet.jm.domain.store.RemoteSettingManager = getKoin().get(),
     imageLoader: coil.ImageLoader = getKoin().get()
 ) {
     LaunchedEffect(Unit) {
@@ -159,7 +159,7 @@ fun App(
 
     // 剪切板自动检测漫画编码（设置开关开启时）
     var clipboardDetectedComicId by remember { mutableStateOf<Int?>(null) }
-    var clipboardDetectedComic by remember { mutableStateOf<com.par9uet.jm.data.models.Comic?>(null) }
+    var clipboardDetectedComic by remember { mutableStateOf<com.par9uet.jm.core.model.Comic?>(null) }
     var clipboardDetectLoading by remember { mutableStateOf(false) }
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     var lastClipboardText by remember { mutableStateOf("") }
@@ -189,7 +189,7 @@ fun App(
     }
 
     // 剪切板检测后获取详情
-    val comicRepository = remember { org.koin.core.context.GlobalContext.get().get<com.par9uet.jm.repository.ComicRepository>() }
+    val comicRepository = remember { org.koin.core.context.GlobalContext.get().get<com.par9uet.jm.data.repository.ComicRepository>() }
     LaunchedEffect(clipboardDetectedComicId) {
         val id = clipboardDetectedComicId ?: return@LaunchedEffect
         clipboardDetectLoading = true
@@ -197,9 +197,9 @@ fun App(
             runCatching { comicRepository.getComicDetail(id) }.getOrNull()
         }
         when (result) {
-            is com.par9uet.jm.retrofit.model.NetWorkResult.Success<*> -> {
+            is com.par9uet.jm.data.network.model.NetWorkResult.Success<*> -> {
                 @Suppress("UNCHECKED_CAST")
-                clipboardDetectedComic = (result.data as com.par9uet.jm.retrofit.model.ComicDetailResponse).toComic()
+                clipboardDetectedComic = (result.data as com.par9uet.jm.data.network.model.ComicDetailResponse).toComic()
             }
             else -> {
                 toastManager.showAsync("剪切板检测：漫画编码 ${id} 无效")

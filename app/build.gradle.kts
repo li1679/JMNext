@@ -4,7 +4,6 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.android.application)
-    alias(libs.plugins.ksp)
 }
 
 val versionProps = Properties().apply {
@@ -103,8 +102,15 @@ composeCompiler {}
 
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
-    implementation(libs.androidx.work.runtime.ktx)
-    ksp(libs.androidx.room.compiler)
+
+    // 分层模块：界面层只依赖设计系统与服务层，不直接触碰网络/数据库实现
+    implementation(project(":core:model"))
+    implementation(project(":core:common"))
+    implementation(project(":core:designsystem"))
+    implementation(project(":domain"))
+    implementation(project(":data:repository"))
+    implementation(project(":data:storage"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -115,31 +121,19 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.material.kolor)
+    implementation(libs.material.icons.extended)
     implementation(libs.androidx.navigation.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.okhttp)
     implementation(libs.gson)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.coil.compose)
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.converter.gson)
-    implementation(libs.retrofit.converter.scalars)
-    implementation(libs.material.icons.extended)
     implementation(libs.koin.androidx.compose)
     implementation(libs.koin.androidx.compose.navigation)
     implementation(libs.koin.androidx.workmanager)
-    implementation(libs.okhttp.logging.interceptor)
-    implementation(libs.paging3.runtime)
     implementation(libs.paging3.compose)
     implementation(libs.kizitonwose.calendar)
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.room.paging)
-    implementation(libs.jmcomic.api)
-    implementation(libs.jmcomic.core) {
-        exclude(group = "org.sejda.imageio", module = "webp-imageio")
-    }
-    implementation(libs.jmcomic.android.support)
+    implementation(libs.androidx.work.runtime.ktx)
+
     testImplementation(libs.junit)
     debugImplementation(libs.androidx.ui.tooling)
 }

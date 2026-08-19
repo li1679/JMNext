@@ -48,4 +48,15 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "jmnext"
+
+// 分层模块：依赖方向自上而下单向流动，由 Gradle 在编译期强制。
+//   app → designsystem / domain / data:repository → data:{network,database,storage} → core:{model,common}
 include(":app")
+include(":core:common")
+include(":core:model")
+include(":core:designsystem")
+include(":data:network")
+include(":data:database")
+include(":data:storage")
+include(":data:repository")
+include(":domain")

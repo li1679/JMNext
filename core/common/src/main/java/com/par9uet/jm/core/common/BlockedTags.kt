@@ -1,0 +1,54 @@
+package com.par9uet.jm.core.common
+
+import com.par9uet.jm.core.model.BlockedTagTemplate
+import com.par9uet.jm.core.model.Comic
+
+fun normalizeBlockedTag(value: String): String {
+    return value.trim()
+}
+
+fun normalizeBlockedTagList(tags: List<String>): List<String> {
+    return tags.map(::normalizeBlockedTag)
+        .filter { it.isNotBlank() }
+        .distinctBy { it.lowercase() }
+}
+
+fun normalizeBlockedTagTemplates(templates: List<BlockedTagTemplate>): List<BlockedTagTemplate> {
+    return templates.mapIndexedNotNull { index, template ->
+        val tags = normalizeBlockedTagList(template.tagList)
+        if (tags.isEmpty()) return@mapIndexedNotNull null
+        val name = template.name.trim().ifBlank { "排除模板 ${index + 1}" }
+        BlockedTagTemplate(name = name, tagList = tags)
+    }
+}
+
+fun flattenBlockedTagTemplates(templates: List<BlockedTagTemplate>): List<String> {
+    return normalizeBlockedTagList(
+        normalizeBlockedTagTemplates(templates).flatMap { it.tagList }
+    )
+}
+
+fun Comic.isBlockedByTags(blockedTags: List<String>): Boolean {
+    if (blockedTags.isEmpty()) return false
+    return isBlockedBy(normalizedBlockedTagSet(blockedTags))
+}
+
+/**
+ * 把屏蔽标签归一化成小写集合。
+ * 调用方需在遍历外算一次：它是逐条 comic 调用的，内联会产生大量重复分配。
+ */
+private fun normalizedBlockedTagSet(blockedTags: List<String>): Set<String> =
+    normalizeBlockedTagList(blockedTags).mapTo(mutableSetOf()) { it.lowercase() }
+
+private fun Comic.isBlockedBy(blockedSet: Set<String>): Boolean {
+    if (blockedSet.isEmpty()) return false
+    return (tagList + roleList + workList)
+        .any { it.trim().lowercase() in blockedSet }
+}
+
+fun List<Comic>.filterBlockedTags(blockedTags: List<String>): List<Comic> {
+    if (blockedTags.isEmpty()) return this
+    val blockedSet = normalizedBlockedTagSet(blockedTags)
+    if (blockedSet.isEmpty()) return this
+    return filterNot { it.isBlockedBy(blockedSet) }
+}

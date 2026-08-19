@@ -6,11 +6,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.par9uet.jm.ui.theme.AppTheme
-
-/** 记录上次解析出的深浅色，供下次冷启动挑选启动窗口背景 */
-const val LAUNCH_THEME_PREFS = "launch-theme"
-const val LAUNCH_THEME_KEY_DARK = "dark"
+import com.par9uet.jm.core.common.LAUNCH_THEME_KEY_DARK
+import com.par9uet.jm.core.common.LAUNCH_THEME_PREFS
+import com.par9uet.jm.core.designsystem.theme.AppTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

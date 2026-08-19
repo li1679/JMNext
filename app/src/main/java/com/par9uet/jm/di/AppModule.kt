@@ -1,65 +1,26 @@
 package com.par9uet.jm.di
 
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import com.google.gson.Strictness
-import com.par9uet.jm.repository.RemoteSettingRepository
-import com.par9uet.jm.repository.impl.RemoteSettingRepositoryImpl
-import com.par9uet.jm.storage.CookieStorage
-import com.par9uet.jm.storage.HistorySearchStorage
-import com.par9uet.jm.storage.LocalSettingStorage
-import com.par9uet.jm.storage.ReadHistoryStorage
-import com.par9uet.jm.storage.SecureStorage
-import com.par9uet.jm.storage.UserStorage
-import com.par9uet.jm.store.AppUpdateDownloadManager
-import com.par9uet.jm.store.DownloadToastAggregator
-import com.par9uet.jm.store.HistorySearchManager
-import com.par9uet.jm.store.InitManager
-import com.par9uet.jm.store.LocalSettingManager
-import com.par9uet.jm.store.ReadHistoryManager
-import com.par9uet.jm.store.RemoteSettingManager
-import com.par9uet.jm.store.ToastManager
-import com.par9uet.jm.store.UserManager
-import com.par9uet.jm.task.AppInitTask
-import com.par9uet.jm.ui.viewModel.GlobalViewModel
-import com.par9uet.jm.utils.LauncherDisguiseApplier
-import com.par9uet.jm.utils.log
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import com.par9uet.jm.ui.feature.detail.ComicDetailViewModel
+import com.par9uet.jm.ui.feature.reader.ComicReadViewModel
+import com.par9uet.jm.ui.feature.home.ComicViewModel
+import com.par9uet.jm.ui.feature.download.DownloadComicDetailViewModel
+import com.par9uet.jm.ui.feature.download.DownloadViewModel
+import com.par9uet.jm.ui.feature.shared.GlobalViewModel
+import com.par9uet.jm.ui.feature.user.UserViewModel
 import org.koin.core.module.dsl.viewModel
-import org.koin.dsl.bind
 import org.koin.dsl.module
 
+/**
+ * 界面层：只注册 ViewModel。
+ * 其余对象由各自所属模块注册（见 commonModule / storageModule / networkModule /
+ * databaseModule / repositoryModule / domainModule），在 [com.par9uet.jm.JmApplication] 汇总。
+ */
 val appModule = module {
-    single {
-        CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
-            log("全局协程捕获到了异常: $throwable")
-        })
-    }
-
-    single { SecureStorage(get()) }
-    single { UserStorage(get()) }
-    single { CookieStorage(get()) }
-    single { LocalSettingStorage(get()) }
-    single { HistorySearchStorage(get()) }
-    single { ReadHistoryStorage(get()) }
-    single { LauncherDisguiseApplier(get()) }
-
-    single { RemoteSettingRepositoryImpl(get(), get()) } bind RemoteSettingRepository::class
-
-    single { UserManager(get(), get(), get(), get()) } bind AppInitTask::class
-    single { RemoteSettingManager(get()) } bind AppInitTask::class
-    single { LocalSettingManager(get(), get()) } bind AppInitTask::class
-    single { HistorySearchManager(get()) } bind AppInitTask::class
-    single { ReadHistoryManager(get()) } bind AppInitTask::class
-    single { ToastManager() }
-    single { DownloadToastAggregator(get()) }
-    single { InitManager() }
-    single { AppUpdateDownloadManager(get(), get(), get()) }
-
-    single<Gson> { GsonBuilder().setStrictness(Strictness.LENIENT).serializeNulls().create() }
-
     viewModel { GlobalViewModel(getAll(), get()) }
+    viewModel { ComicViewModel(get(), get()) }
+    viewModel { ComicDetailViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { ComicReadViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { UserViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { DownloadViewModel(get(), get()) }
+    viewModel { DownloadComicDetailViewModel(get()) }
 }

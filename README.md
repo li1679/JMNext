@@ -8,26 +8,6 @@
 
 ---
 
-## 截图
-
-| 首页                            | 详情（日间）                                            |
-| ------------------------------- | ------------------------------------------------------- |
-| ![首页](readme-assets/首页.jpg) | ![详情（日间模式）](readme-assets/详情（日间模式）.jpg) |
-
-| 详情（夜间）                                            | 搜索                             |
-| ------------------------------------------------------- | -------------------------------- |
-| ![详情（夜间模式）](readme-assets/详情（夜间模式）.jpg) | ![搜索](readme-assets/搜索1.jpg) |
-
-| 搜索结果                             | 每周必看                                |
-| ------------------------------------ | --------------------------------------- |
-| ![搜索结果](readme-assets/搜索2.jpg) | ![每周必看](readme-assets/每周必看.jpg) |
-
-| 签到                            | 个人中心                                |
-| ------------------------------- | --------------------------------------- |
-| ![签到](readme-assets/签到.jpg) | ![个人中心](readme-assets/个人中心.jpg) |
-
----
-
 ## 功能
 
 **浏览与阅读**
@@ -52,7 +32,6 @@
 - 标签屏蔽，支持屏蔽模板
 - 应用锁（密码 / 图案）、桌面图标伪装
 - 收藏与设置的备份和恢复
-- 可选的 AI 对话入口与角色设定（默认关闭，需自行配置）
 
 ---
 
@@ -61,7 +40,7 @@
 | 领域 | 选型 |
 | --- | --- |
 | UI | Jetpack Compose、Material 3 |
-| 架构 | MVVM + Repository |
+| 架构 | 分层多模块 + MVVM + Repository |
 | 依赖注入 | Koin |
 | 网络 | Retrofit、OkHttp |
 | 图片 | Coil |
@@ -69,6 +48,64 @@
 | 分页 | Paging 3 |
 | 后台任务 | WorkManager |
 | 数据源 | JMComic-Api-Java（内置）/ HTTP API（网络） |
+
+---
+
+## 工程结构
+
+项目按职责拆分为独立的 Gradle 模块，依赖方向单向向下，由编译器强制，跨层引用会直接编译失败。
+
+```
+:app                  应用壳：Application、Activity、导航图、Manifest、资源、界面层
+:core:designsystem    主题与无业务语义的通用 Compose 组件
+:domain               服务层：跨页面共享的业务状态、下载编排、图片加载与解扰
+:data:repository      仓库层：对上暴露统一接口，对下屏蔽数据源差异
+:data:network         Retrofit 接口、拦截器链、响应加解密
+:data:database        Room 实体、DAO、迁移
+:data:storage         本地持久化与加密存储
+:core:model           领域数据模型与界面状态模型
+:core:common          日志、格式化、图片解扰算法等无依赖工具
+```
+
+依赖关系：
+
+```
+                    :app
+                     │
+     ┌───────────────┼────────────────┐
+     ▼               ▼                ▼
+:core:designsystem  :domain    :data:repository
+     │               │                │
+     │               ▼                ▼
+     └────────► :data:storage   :data:network
+                     │          :data:database
+                     ▼                │
+              :core:common ◄──────────┘
+                     │
+                     ▼
+              :core:model
+```
+
+界面层在 `:app` 内按业务域组织，避免所有页面堆在同一目录：
+
+```
+app/src/main/java/com/par9uet/jm/
+├── JmApplication.kt   Koin 装配、运行环境注入
+├── MainActivity.kt    启动主题、Compose 入口
+├── App.kt             应用锁 / 引导 / 全局提示的外层容器
+├── di/                ViewModel 注册
+├── ui/component/      漫画业务组件（封面、标签、网格、评论）
+├── ui/feature/        按域划分的页面与 ViewModel
+│   ├── home/          首页、底部导航、顶部栏
+│   ├── search/        搜索、搜索结果、车牌号提取
+│   ├── detail/        详情、章节、评论、相关推荐
+│   ├── reader/        阅读器（卷轴 / 翻页 / 工具栏）
+│   ├── download/      下载列表与下载详情
+│   ├── user/          登录、签到、收藏、历史
+│   ├── settings/      设置、配色、屏蔽、备份、更新、日志
+│   └── shared/        跨域共用的全局 ViewModel 与占位页
+└── ui/state/          导航期共享的轻量状态
+```
 
 ---
 
@@ -93,7 +130,7 @@ cd JMNext
 运行测试：
 
 ```bash
-./gradlew :app:testDebugUnitTest
+./gradlew test
 ```
 
 ### 说明
@@ -105,34 +142,13 @@ cd JMNext
 
 ---
 
-## 项目结构
-
-```
-app/src/main/java/com/par9uet/jm/
-├── cache/          下载与解码缓存的目录规则
-├── coil/           图片加载器配置
-├── data/models/    数据模型
-├── database/       Room 实体与 DAO
-├── di/             Koin 模块
-├── repository/     数据仓库，屏蔽内置/网络数据源差异
-├── retrofit/       接口定义、拦截器、加解密
-├── storage/        本地持久化
-├── store/          全局状态管理
-├── task/           启动初始化任务
-├── ui/             页面、组件、ViewModel
-├── utils/          工具函数
-└── worker/         下载后台任务
-```
-
----
-
 ## 关键实现
 
-这几处逻辑对显示正确性影响较大，修改前建议先读懂，配套单元测试位于 `app/src/test/`。
+这几处逻辑对显示正确性影响较大，修改前建议先读懂，配套单元测试位于各模块的 `src/test/`。
 
 ### 图片解扰
 
-服务端下发的图片被按行切块并倒序排列，需要按相同的分块数还原。分块数由 `utils/JmScramble.kt` 计算，规则与服务端一致：
+服务端下发的图片被按行切块并倒序排列，需要按相同的分块数还原。分块数由 `:core:common` 的 `JmScramble.kt` 计算，规则与服务端一致：
 
 | 条件 | 分块数 |
 | --- | --- |
@@ -160,6 +176,15 @@ app/src/main/java/com/par9uet/jm/
 - 线路失效时按候选列表自动回退，并记住最后可用的线路
 - 签名时间戳每个请求单独生成，避免应用长期驻留后台后过期
 - 404 只写入日志不弹提示（线路问题用户无法处理，已有自动回退兜底）；提示统一在 `ToastManager` 去重节流
+
+### 分层约束
+
+下层模块拿不到宿主应用的 `BuildConfig` 与 `R`，因此这两项由 `:app` 在启动时注入一次：
+
+- `AppEnv.init(BuildConfig.DEBUG)` —— 决定日志是否输出到 logcat
+- `NotificationIcon.init(R.drawable.…)` —— 通知使用的小图标
+
+服务层不引用任何 Activity。更新完成通知通过 `getLaunchIntentForPackage` 打开应用，路由信息由 Intent extra 传递。
 
 ---
 

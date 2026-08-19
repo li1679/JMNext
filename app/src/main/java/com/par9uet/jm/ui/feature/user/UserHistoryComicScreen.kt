@@ -1,5 +1,6 @@
 package com.par9uet.jm.ui.feature.user
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -22,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -81,6 +83,13 @@ fun UserHistoryComicScreen(
     val localSetting by localSettingManager.localSettingState.collectAsState()
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
+    BackHandler(enabled = historyEditState.editing) {
+        userViewModel.clearHistorySelection()
+    }
+    DisposableEffect(userViewModel) {
+        onDispose { userViewModel.clearHistorySelection() }
+    }
+
     val selectedComics: List<com.par9uet.jm.core.model.Comic> = remember(historyComicLazyPagingItems.itemSnapshotList, historyEditState.selectedComicIds) {
         historyComicLazyPagingItems.itemSnapshotList.filterNotNull().filter { it.id in historyEditState.selectedComicIds }
     }
@@ -121,6 +130,9 @@ fun UserHistoryComicScreen(
                         },
                         onToggleSelected = {
                             userViewModel.toggleHistorySelected(comic.id)
+                        },
+                        onBeforeOpenDetail = {
+                            userViewModel.clearHistorySelection()
                         }
                     )
                 }

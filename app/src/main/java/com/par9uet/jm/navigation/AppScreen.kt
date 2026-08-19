@@ -162,9 +162,14 @@ fun AppScreen(
                     }
                 ),
             ) { backStackEntry ->
-                val searchContent = backStackEntry.arguments?.getString("searchContent") ?: ""
+                val restoredSearchContent = backStackEntry.savedStateHandle
+                    .get<String>("searchContent")
+                val restoredExcludedTags = backStackEntry.savedStateHandle
+                    .get<String>("excludedTags")
+                val searchContent = restoredSearchContent
+                    ?: backStackEntry.arguments?.getString("searchContent").orEmpty()
                 val excludedTags = deserializeExcludedTags(
-                    backStackEntry.arguments?.getString("excludedTags")
+                    restoredExcludedTags ?: backStackEntry.arguments?.getString("excludedTags")
                 )
                 ComicSearchScreen(
                     initialSearchContent = searchContent,

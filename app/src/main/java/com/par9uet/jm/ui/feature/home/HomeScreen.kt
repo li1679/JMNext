@@ -143,7 +143,11 @@ fun HomeScreen(
     val homeComicState by comicViewModel.homeComicState.collectAsState()
     val isLogin by userManager.isLoginState.collectAsState(false)
     val localSetting by localSettingManager.localSettingState.collectAsState()
-    val onSearch = { mainNavController.navigate("comicSearch") }
+    val onSearch = {
+        // 搜索 ViewModel 是 Activity 级别的，首页入口代表新的搜索会话。
+        comicViewModel.clearSearchState()
+        mainNavController.navigate("comicSearch")
+    }
     val onDownload = { mainNavController.navigate("download") }
     val onRecommend = { mainNavController.navigate("comicRecommend") }
     val onExtract = { mainNavController.navigate("extractCode") }

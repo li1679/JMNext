@@ -146,6 +146,17 @@ class ComicViewModel(
         }
     }
 
+    /**
+     * 开始一次全新的搜索会话。
+     *
+     * 搜索结果页使用 Activity 级 ViewModel，因此离开搜索页后过滤条件仍会存活。
+     * 从首页再次打开搜索时必须显式清掉它，否则编辑框会把上一次查询重新带回来。
+     */
+    fun clearSearchState() {
+        _searchComicIdState.value = null
+        _searchComicFilterState.value = SearchComicFilter()
+    }
+
     fun consumeSearchComicId() {
         _searchComicIdState.update { null }
     }

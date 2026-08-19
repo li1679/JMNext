@@ -10,7 +10,9 @@ class LauncherDisguiseApplier(
 ) {
     fun apply(disguise: LauncherDisguise) {
         val packageManager = context.packageManager
-        val componentClassPrefix = context.applicationContext::class.java.packageName
+        // applicationId 可与源码 namespace 不同，别用 context.packageName 拼 alias；
+        // Class.getPackageName() 又只在 API 31+ 可用，因此从应用类全名截取源码包名。
+        val componentClassPrefix = context.applicationContext::class.java.name.substringBeforeLast('.')
         LauncherDisguise.entries.forEach { item ->
             runCatching {
                 packageManager.setComponentEnabledSetting(

@@ -87,12 +87,19 @@ fun ComicSearchResultScreen(
 
     fun navigateToSearchEditor() {
         val previousRoute = mainNavController.previousBackStackEntry?.destination?.route.orEmpty()
-        val previousIsSearchEditor = previousRoute == "comicSearch" || previousRoute.startsWith("comicSearch?")
-        if (previousIsSearchEditor && mainNavController.popBackStack()) return
-
-        mainNavController.popBackStack()
-        mainNavController.navigate(editRoute()) {
-            launchSingleTop = true
+        val previousIsSearchEditor = previousRoute.startsWith("comicSearch") &&
+            !previousRoute.startsWith("comicSearchResult")
+        if (previousIsSearchEditor) {
+            mainNavController.previousBackStackEntry?.savedStateHandle?.apply {
+                set("searchContent", comicSearchFilterState.searchContent)
+                set("excludedTags", serializeExcludedTags(comicSearchFilterState.excludedTags))
+            }
+            mainNavController.popBackStack()
+        } else {
+            mainNavController.popBackStack()
+            mainNavController.navigate(editRoute()) {
+                launchSingleTop = true
+            }
         }
     }
 

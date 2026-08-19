@@ -2,6 +2,7 @@ package com.par9uet.jm.ui.feature.user
 
 import com.par9uet.jm.navigation.LocalMainNavController
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -67,6 +68,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -171,6 +173,13 @@ fun UserCollectComicScreen(
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showMoveFolderDialog by remember { mutableStateOf(false) }
     var showDeleteCollectConfirmDialog by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = collectEditState.editing) {
+        userViewModel.clearCollectSelection()
+    }
+    DisposableEffect(userViewModel) {
+        onDispose { userViewModel.clearCollectSelection() }
+    }
 
     val folders = remember(folderList) {
         val result = linkedMapOf<String, String>()
@@ -326,6 +335,9 @@ fun UserCollectComicScreen(
                         },
                         onToggleSelected = {
                             userViewModel.toggleCollectSelected(comic.id)
+                        },
+                        onBeforeOpenDetail = {
+                            userViewModel.clearCollectSelection()
                         }
                     )
                 }

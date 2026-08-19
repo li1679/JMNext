@@ -113,12 +113,6 @@ fun DownloadComicDetailScreen(
             toastManager.showAsync("未选择可导出的缓存章节")
             return@rememberLauncherForActivityResult
         }
-        val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-            android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-            android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(uri, flags)
-        }
         exporting = true
         scope.launch {
             val result = runCatching {

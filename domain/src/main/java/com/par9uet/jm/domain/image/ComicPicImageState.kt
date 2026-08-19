@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -27,6 +28,8 @@ import com.par9uet.jm.core.common.compressWebpCompat
 import com.par9uet.jm.core.common.logError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -61,18 +64,47 @@ class ComicPicImageState(
     private val scrambleAid: Int
         get() = if (__aId > 0) __aId else comicId
 
+    private val stateLock = Any()
+    private var decodeGeneration = 0L
+
     var imageResultState by mutableStateOf<ImageResultState>(ImageResultState.Loading)
+
+    private fun beginDecode(): Long = synchronized(stateLock) {
+        decodeGeneration += 1
+        imageResultState = ImageResultState.Loading
+        decodeGeneration
+    }
+
+    /**
+     * 只允许当前这一轮解码写回。
+     *
+     * cancel 与位图处理不在同一线程，单独调用 ensureActive 后仍存在“检查通过、随后被
+     * release、最后旧任务写回”的竞态。把代次检查和状态写入放进同一临界区后，旧任务
+     * 无法复活已经被逐出保留窗口的全尺寸位图。
+     */
+    private fun publishIfCurrent(generation: Long, state: ImageResultState): Boolean =
+        synchronized(stateLock) {
+            if (generation != decodeGeneration) {
+                false
+            } else {
+                imageResultState = state
+                true
+            }
+        }
 
     /** 释放位图引用并退回未加载态。只丢引用不 recycle：该位图可能正被 Compose 绘制。 */
     fun release() {
-        imageResultState = ImageResultState.Loading
+        synchronized(stateLock) {
+            decodeGeneration += 1
+            imageResultState = ImageResultState.Loading
+        }
     }
 
     suspend fun decode(context: Context) {
+        val generation = beginDecode()
         withContext(Dispatchers.Default) {
-            imageResultState = ImageResultState.Loading
             try {
-                decodeImage(context)
+                decodeImage(context, generation)
             } catch (e: CancellationException) {
                 // 快速翻页时，上一批预加载会被成批取消，这是正常流程而非故障。
                 // 必须原样抛出：捕获它等于吞掉协程的取消信号，
@@ -80,15 +112,18 @@ class ComicPicImageState(
                 throw e
             } catch (e: OutOfMemoryError) {
                 logError("ComicPicImage", "解码图片内存不足: ${e.message}")
-                imageResultState = ImageResultState.Failure("内存不足，无法解码图片")
+                publishIfCurrent(generation, ImageResultState.Failure("内存不足，无法解码图片"))
             } catch (e: Exception) {
                 logError("ComicPicImage", "解码图片异常: ${e.stackTraceToString()}")
-                imageResultState = ImageResultState.Failure("图片解码失败：${e.message ?: "未知错误"}")
+                publishIfCurrent(
+                    generation,
+                    ImageResultState.Failure("图片解码失败：${e.message ?: "未知错误"}")
+                )
             }
         }
     }
 
-    private suspend fun decodeImage(context: Context) {
+    private suspend fun decodeImage(context: Context, generation: Long) {
         val cacheDir = getCommonPicDecodeCacheDir(context, comicId)
         if (!cacheDir.exists()) {
             cacheDir.mkdirs()
@@ -101,18 +136,28 @@ class ComicPicImageState(
         val cacheFile = File(cacheDir, "${page}_s$seed.webp")
 
         if (cacheFile.exists()) {
+            var decodedBitmap: Bitmap? = null
+            var published = false
             try {
-                val decodeImageBitmap =
-                    BitmapFactory.decodeFile(cacheFile.absolutePath)?.asImageBitmap()
-                        ?: run {
-                            cacheFile.delete()
-                            throw IllegalStateException("缓存图片解码为空")
-                        }
+                decodedBitmap = BitmapFactory.decodeFile(cacheFile.absolutePath)
+                    ?: run {
+                        cacheFile.delete()
+                        throw IllegalStateException("缓存图片解码为空")
+                    }
                 val decodeImageAspectRatio =
-                    decodeImageBitmap.width * 1.0f / decodeImageBitmap.height
-                imageResultState = ImageResultState.Success(decodeImageBitmap, decodeImageAspectRatio)
+                    decodedBitmap.width * 1.0f / decodedBitmap.height
+                currentCoroutineContext().ensureActive()
+                published = publishIfCurrent(
+                    generation,
+                    ImageResultState.Success(decodedBitmap.asImageBitmap(), decodeImageAspectRatio)
+                )
+                if (!published) decodedBitmap.recycle()
                 return
+            } catch (e: CancellationException) {
+                if (!published && decodedBitmap?.isRecycled == false) decodedBitmap.recycle()
+                throw e
             } catch (e: Exception) {
+                if (!published && decodedBitmap?.isRecycled == false) decodedBitmap.recycle()
                 logError("ComicPicImage", "缓存图片解码失败，删除并重新解码: ${e.message}")
                 cacheFile.delete()
             }
@@ -133,13 +178,19 @@ class ComicPicImageState(
                 // 内存缓存所有；其余类型才是这里新建的，可以安全回收。
                 val bitmap = drawable.toBitmap()
                 val owns = drawable !is BitmapDrawable || drawable.bitmap !== bitmap
-                imageResultState = processBitmap(bitmap, seed, cacheFile, ownsOriginal = owns)
+                currentCoroutineContext().ensureActive()
+                val processed = processBitmap(bitmap, seed, cacheFile, ownsOriginal = owns)
+                val published = publishIfCurrent(generation, processed)
+                recycleUnpublishedSuccess(processed, published, seed != 0 || owns)
             }
 
             is ErrorResult -> {
                 // Coil 加载失败，尝试使用内置 API 的 imageFetcher 回退
                 val fetchedBytes = try {
                     imageFetcher?.invoke()
+                } catch (e: CancellationException) {
+                    // 回退请求同样属于可取消工作，不能被当成网络失败吞掉。
+                    throw e
                 } catch (e: Exception) {
                     logError("ComicPicImage", "imageFetcher 调用失败: ${e.stackTraceToString()}")
                     null
@@ -150,20 +201,30 @@ class ComicPicImageState(
                             .decodeByteArray(fetchedBytes, 0, fetchedBytes.size)
                         if (originalBitmap != null) {
                             // 这张位图由本方解码，无人共享，可以回收
-                            imageResultState =
-                                processBitmap(originalBitmap, seed, cacheFile, ownsOriginal = true)
+                            val processed = processBitmap(
+                                originalBitmap,
+                                seed,
+                                cacheFile,
+                                ownsOriginal = true
+                            )
+                            currentCoroutineContext().ensureActive()
+                            val published = publishIfCurrent(generation, processed)
+                            recycleUnpublishedSuccess(processed, published, ownsBitmap = true)
                             return
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: OutOfMemoryError) {
                         logError("ComicPicImage", "内置API图片解码内存不足: ${e.message}")
-                        imageResultState = ImageResultState.Failure("内存不足")
+                        publishIfCurrent(generation, ImageResultState.Failure("内存不足"))
                         return
                     } catch (e: Exception) {
                         logError("ComicPicImage", "内置API图片解码失败: ${e.stackTraceToString()}")
                     }
                 }
+                currentCoroutineContext().ensureActive()
                 logError("ComicPicImage", "图片加载失败: ${result.throwable.stackTraceToString()}")
-                imageResultState = ImageResultState.Failure("网络错误")
+                publishIfCurrent(generation, ImageResultState.Failure("网络错误"))
             }
         }
     }
@@ -178,69 +239,136 @@ class ComicPicImageState(
         cacheFile: File,
         ownsOriginal: Boolean
     ): ImageResultState {
+        var finalBitmap: Bitmap? = null
+        var originalRecycled = false
         return try {
             val aspectRatio = originalBitmap.width * 1.0f / originalBitmap.height
-            val finalBitmap = if (seed == 0) {
+            val processedBitmap = if (seed == 0) {
                 originalBitmap
             } else {
                 // 解扰产出同尺寸新位图，原图随即无人引用。
                 // 但只有独占它时才能回收，否则会波及 Coil 的内存缓存。
                 decodeBitmap(originalBitmap, seed).also {
-                    if (ownsOriginal) originalBitmap.recycle()
+                    if (ownsOriginal) {
+                        originalBitmap.recycle()
+                        originalRecycled = true
+                    }
                 }
             }
-            saveBitmapAsWebp(finalBitmap, cacheFile)
-            ImageResultState.Success(finalBitmap.asImageBitmap(), aspectRatio)
+            finalBitmap = processedBitmap
+            saveBitmapAsWebp(processedBitmap, cacheFile)
+            ImageResultState.Success(processedBitmap.asImageBitmap(), aspectRatio)
         } catch (e: CancellationException) {
+            cacheFile.delete()
+            recycleOwnedBitmaps(
+                originalBitmap = originalBitmap,
+                ownsOriginal = ownsOriginal,
+                finalBitmap = finalBitmap,
+                originalRecycled = originalRecycled
+            )
             throw e
         } catch (e: OutOfMemoryError) {
+            cacheFile.delete()
+            recycleOwnedBitmaps(
+                originalBitmap = originalBitmap,
+                ownsOriginal = ownsOriginal,
+                finalBitmap = finalBitmap,
+                originalRecycled = originalRecycled
+            )
             logError("ComicPicImage", "图片处理内存不足: ${e.message}")
             ImageResultState.Failure("内存不足")
         } catch (e: Exception) {
+            cacheFile.delete()
+            recycleOwnedBitmaps(
+                originalBitmap = originalBitmap,
+                ownsOriginal = ownsOriginal,
+                finalBitmap = finalBitmap,
+                originalRecycled = originalRecycled
+            )
             logError("ComicPicImage", "图片处理失败: ${e.stackTraceToString()}")
             ImageResultState.Failure("图片处理失败：${e.message ?: "未知错误"}")
         }
     }
 
-    private fun decodeBitmap(originalBitmap: Bitmap, seed: Int): Bitmap {
+    private fun recycleUnpublishedSuccess(
+        state: ImageResultState,
+        published: Boolean,
+        ownsBitmap: Boolean
+    ) {
+        if (published || !ownsBitmap || state !is ImageResultState.Success) return
+        state.decodeImageBitmap.asAndroidBitmap().let { bitmap ->
+            if (!bitmap.isRecycled) bitmap.recycle()
+        }
+    }
+
+    private fun recycleOwnedBitmaps(
+        originalBitmap: Bitmap,
+        ownsOriginal: Boolean,
+        finalBitmap: Bitmap?,
+        originalRecycled: Boolean
+    ) {
+        if (
+            finalBitmap != null &&
+            (finalBitmap !== originalBitmap || ownsOriginal) &&
+            !finalBitmap.isRecycled
+        ) {
+            finalBitmap.recycle()
+        }
+        if (
+            ownsOriginal &&
+            !originalRecycled &&
+            finalBitmap !== originalBitmap &&
+            !originalBitmap.isRecycled
+        ) {
+            originalBitmap.recycle()
+        }
+    }
+
+    private suspend fun decodeBitmap(originalBitmap: Bitmap, seed: Int): Bitmap {
         val naturalWidth = originalBitmap.width
         val naturalHeight = originalBitmap.height
         val remainder = naturalHeight % seed
 
-        val decodedBitmap =
-            createBitmap(naturalWidth, naturalHeight)
-        val canvas = Canvas(decodedBitmap.asImageBitmap())
-        val paint = Paint().apply {
-            this.isAntiAlias = false
-        }
-        val originImageBitmap = originalBitmap.asImageBitmap()
+        val decodedBitmap = createBitmap(naturalWidth, naturalHeight)
+        var completed = false
+        try {
+            val canvas = Canvas(decodedBitmap.asImageBitmap())
+            val paint = Paint().apply {
+                this.isAntiAlias = false
+            }
+            val originImageBitmap = originalBitmap.asImageBitmap()
 
-        for (i in 0 until seed) {
-            var height = naturalHeight / seed
-            var dy = height * i
-            val sy = naturalHeight - height * (i + 1) - remainder
-            if (i == 0) {
-                height += remainder
-            } else {
-                dy += remainder
+            for (i in 0 until seed) {
+                currentCoroutineContext().ensureActive()
+                var height = naturalHeight / seed
+                var dy = height * i
+                val sy = naturalHeight - height * (i + 1) - remainder
+                if (i == 0) {
+                    height += remainder
+                } else {
+                    dy += remainder
+                }
+
+                val srcOffset = IntOffset(0, sy)
+                val srcSize = IntSize(naturalWidth, height)
+                val destOffset = IntOffset(0, dy)
+                val destSize = IntSize(naturalWidth, height)
+
+                canvas.drawImageRect(
+                    originImageBitmap,
+                    srcOffset,
+                    srcSize,
+                    destOffset,
+                    destSize,
+                    paint
+                )
             }
 
-            val srcOffset = IntOffset(0, sy)
-            val srcSize = IntSize(naturalWidth, height)
-            val destOffset = IntOffset(0, dy)
-            val destSize = IntSize(naturalWidth, height)
-
-            canvas.drawImageRect(
-                originImageBitmap,
-                srcOffset,
-                srcSize,
-                destOffset,
-                destSize,
-                paint
-            )
+            completed = true
+            return decodedBitmap
+        } finally {
+            if (!completed && !decodedBitmap.isRecycled) decodedBitmap.recycle()
         }
-
-        return decodedBitmap
     }
 
     /**

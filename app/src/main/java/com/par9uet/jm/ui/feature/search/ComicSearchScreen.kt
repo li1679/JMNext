@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -73,9 +74,19 @@ fun ComicSearchScreen(
     val mainNavController = LocalMainNavController.current
     val focusRequester = remember { FocusRequester() }
     val searchComicFilterState by comicViewModel.searchComicFilterState.collectAsState()
-    // 从搜索结果页返回时，ViewModel 持有最新搜索参数；首次进入时 ViewModel 为空，回退到 URL 参数
-    val effectiveSearchContent = searchComicFilterState.searchContent.ifBlank { initialSearchContent }
-    val effectiveExcludedTags = searchComicFilterState.excludedTags.ifEmpty { initialExcludedTags }
+    // 带参数的路由是「从结果页返回编辑」或其它页面带条件跳转，路由参数优先。
+    // 无参数路由则使用 ViewModel 中本次搜索会话的状态；首页入口会在导航前清空它。
+    val hasRouteSearch = initialSearchContent.isNotBlank() || initialExcludedTags.isNotEmpty()
+    val effectiveSearchContent = if (hasRouteSearch) {
+        initialSearchContent
+    } else {
+        searchComicFilterState.searchContent
+    }
+    val effectiveExcludedTags = if (hasRouteSearch) {
+        initialExcludedTags
+    } else {
+        searchComicFilterState.excludedTags
+    }
     val editableInitialContent = remember(effectiveSearchContent) {
         searchContentWithoutExcludedTags(effectiveSearchContent)
     }
@@ -113,12 +124,21 @@ fun ComicSearchScreen(
         )
     }
 
+    fun leaveSearchEditor() {
+        // 只有真正离开编辑页时才清理；从结果页返回编辑页走的是结果页自己的
+        // BackHandler，不会调用这里，因此查询仍可被继续编辑。
+        comicViewModel.clearSearchState()
+        mainNavController.popBackStack()
+    }
+
     LaunchedEffect(editableInitialContent) {
         if (textFieldState.text.toString() != editableInitialContent) {
             textFieldState.edit { replace(0, length, editableInitialContent) }
         }
         focusRequester.requestFocus()
     }
+
+    BackHandler(onBack = ::leaveSearchEditor)
 
     Scaffold(
         modifier = Modifier.fillMaxWidth(),
@@ -131,7 +151,7 @@ fun ComicSearchScreen(
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
                 navigationIcon = {
-                    IconButton(onClick = { mainNavController.popBackStack() }) {
+                    IconButton(onClick = { leaveSearchEditor() }) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
                     }
                 },

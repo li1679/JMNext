@@ -22,6 +22,7 @@ import com.par9uet.jm.core.model.CommonUIState
 import com.par9uet.jm.ui.feature.detail.ComicCommentPagingSource
 import com.par9uet.jm.core.common.log
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -43,8 +44,14 @@ class ComicDetailViewModel(
     )
     val comicDetailState = _comicDetailState.asStateFlow()
 
+    /** 详情请求只允许最后一次导航目标写回状态。 */
+    private var comicDetailJob: Job? = null
+    private var comicDetailRequestId = 0L
+
     fun getComicDetail(id: Int) {
-        viewModelScope.launch {
+        comicDetailJob?.cancel()
+        val requestId = ++comicDetailRequestId
+        comicDetailJob = viewModelScope.launch {
             _comicDetailState.update {
                 it.copy(
                     isLoading = true,
@@ -54,26 +61,32 @@ class ComicDetailViewModel(
             }
             when (val data = comicRepository.getComicDetail(id)) {
                 is NetWorkResult.Error -> {
-                    _comicDetailState.update {
-                        it.copy(
-                            isError = true,
-                            errorMsg = data.message
-                        )
+                    if (requestId == comicDetailRequestId) {
+                        _comicDetailState.update {
+                            it.copy(
+                                isError = true,
+                                errorMsg = data.message
+                            )
+                        }
                     }
                 }
 
                 is NetWorkResult.Success<ComicDetailResponse> -> {
-                    _comicDetailState.update {
-                        it.copy(
-                            data = data.data.toComic()
-                        )
+                    if (requestId == comicDetailRequestId) {
+                        _comicDetailState.update {
+                            it.copy(
+                                data = data.data.toComic()
+                            )
+                        }
                     }
                 }
             }
-            _comicDetailState.update {
-                it.copy(
-                    isLoading = false
-                )
+            if (requestId == comicDetailRequestId) {
+                _comicDetailState.update {
+                    it.copy(
+                        isLoading = false
+                    )
+                }
             }
         }
     }
@@ -103,7 +116,7 @@ class ComicDetailViewModel(
                     toastManager.showAsync("喜欢成功")
                     _comicDetailState.update { state ->
                         val currentData = state.data
-                        if (currentData != null) {
+                        if (currentData?.id == id) {
                             state.copy(
                                 data = currentData.copy(
                                     isLike = true,
@@ -149,7 +162,7 @@ class ComicDetailViewModel(
                     toastManager.showAsync("收藏成功")
                     _comicDetailState.update { state ->
                         val currentData = state.data
-                        if (currentData != null) {
+                        if (currentData?.id == id) {
                             state.copy(data = currentData.copy(isCollect = true))
                         } else {
                             state
@@ -188,7 +201,7 @@ class ComicDetailViewModel(
                     toastManager.showAsync("取消收藏成功")
                     _comicDetailState.update { state ->
                         val currentData = state.data
-                        if (currentData != null) {
+                        if (currentData?.id == id) {
                             state.copy(data = currentData.copy(isCollect = false))
                         } else {
                             state
@@ -259,7 +272,7 @@ class ComicDetailViewModel(
                     }
                     _comicDetailState.update { state ->
                         val currentData = state.data
-                        if (currentData != null) {
+                        if (currentData?.id == comicId) {
                             state.copy(data = currentData.copy(isCollect = true))
                         } else {
                             state
@@ -272,7 +285,10 @@ class ComicDetailViewModel(
     }
 
     fun reset(id: Int?) {
-        if (id != null && id == _comicDetailState.value.data?.id) {
+        comicDetailJob?.cancel()
+        comicDetailJob = null
+        comicDetailRequestId++
+        if (id != null && id == _comicDetailState.value.data?.id && !_comicDetailState.value.isLoading) {
             return
         }
         _comicDetailState.update {

@@ -22,13 +22,19 @@ import com.par9uet.jm.data.network.model.ComicPicListResponse
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.storage.LocalSettingManager
 import com.par9uet.jm.domain.store.ReadHistoryManager
+import com.par9uet.jm.domain.image.ImageResultState
 import com.par9uet.jm.core.common.ToastManager
 import com.par9uet.jm.core.model.CommonUIState
 import com.par9uet.jm.core.common.log
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -69,11 +75,10 @@ class ComicReadViewModel(
 
     val size: Int get() = _comicPicState.value.data?.size ?: 0
 
-    /** 已解码或正在解码的页码 */
-    private val decodedIndices = mutableSetOf<Int>()
-
-    /** 进行中的解码任务，页面被移出保留窗口时据此取消 */
+    /** 进行中的解码任务，页面被移出保留窗口时据此取消。 */
     private val decodeJobs = mutableMapOf<Int, Job>()
+    /** 完成回调可能来自解码线程，与主线程的保留窗口清理并发时需要同一把锁。 */
+    private val decodeJobsLock = Any()
 
     // 信号量始终生效：并发解码若无上限，快速滚动时会同时展开数十张全尺寸位图
     private var decodeSemaphore: Semaphore = Semaphore(DEFAULT_DECODE_CONCURRENCY)
@@ -153,9 +158,12 @@ class ComicReadViewModel(
                 is NetWorkResult.Success<CollectComicResponse> -> {
                     toastManager.showAsync(if (targetCollect) "收藏成功" else "取消收藏成功")
                     _comicDetailState.update {
-                        it.copy(
-                            data = it.data?.copy(isCollect = targetCollect)
-                        )
+                        val currentData = it.data
+                        if (currentData?.id == comicId) {
+                            it.copy(data = currentData.copy(isCollect = targetCollect))
+                        } else {
+                            it
+                        }
                     }
                 }
             }
@@ -347,20 +355,23 @@ class ComicReadViewModel(
     /**
      * 只保留 [start]..[end]（两端各外扩 [RETAIN_MARGIN] 页）范围内已解码的页，其余释放。
      *
-     * 记录「解码过」的集合必须能逐出：ImageResultState.Success 持有全尺寸位图，
-     * 只增不减会让一次阅读会话翻过的每一页都常驻内存。
+     * [ImageResultState.Success] 持有全尺寸位图，离开保留窗口后必须释放；
+     * 需要重新显示时会按当前窗口重新排队解码。
      */
     private fun retainOnly(start: Int, end: Int) {
         val keepStart = start - RETAIN_MARGIN
         val keepEnd = end + RETAIN_MARGIN
         val data = _comicPicState.value.data ?: return
-        val iterator = decodedIndices.iterator()
-        while (iterator.hasNext()) {
-            val i = iterator.next()
-            if (i in keepStart..keepEnd) continue
-            decodeJobs.remove(i)?.cancel()
-            data.getOrNull(i)?.release()
-            iterator.remove()
+        val jobsToCancel = synchronized(decodeJobsLock) {
+            val indices = decodeJobs.keys.filter { it !in keepStart..keepEnd }
+            indices.mapNotNull { index ->
+                // 先摘除，再 cancel，避免旧任务的完成回调误删新任务。
+                decodeJobs.remove(index)
+            }
+        }
+        jobsToCancel.forEach { it.cancel() }
+        data.forEachIndexed { index, image ->
+            if (index !in keepStart..keepEnd) image.release()
         }
     }
 
@@ -368,11 +379,11 @@ class ComicReadViewModel(
     private fun releaseAll() {
         // 必须先取快照并清空 map 再逐个 cancel：cancel() 可能同步触发
         // invokeOnCompletion 回调去 remove 同一个 map，边遍历边改会抛 CME
-        val jobs = decodeJobs.values.toList()
-        decodeJobs.clear()
+        val jobs = synchronized(decodeJobsLock) {
+            decodeJobs.values.toList().also { decodeJobs.clear() }
+        }
         jobs.forEach { it.cancel() }
         _comicPicState.value.data?.forEach { it.release() }
-        decodedIndices.clear()
     }
 
     fun prev(context: Context) {
@@ -393,24 +404,60 @@ class ComicReadViewModel(
 
     private fun decode(index: Int, context: Context, onComplete: (() -> Unit)? = null) {
         val comicPicImageState = comicPicState.value.data?.getOrNull(index) ?: return
-        // add 返回 false 说明这一页已经解码过或正在解码中
-        if (!decodedIndices.add(index)) {
+        // 成功页无需重复解码；进行中的任务也不能重复排队。
+        val shouldStart = synchronized(decodeJobsLock) {
+            comicPicImageState.imageResultState !is ImageResultState.Success &&
+                !decodeJobs.containsKey(index)
+        }
+        if (!shouldStart) {
             onComplete?.invoke()
             return
         }
         val semaphore = getDecodeSemaphore()
-        val job = viewModelScope.launch {
+        // 先登记再启动，避免极快完成的任务在 map 登记前触发完成回调。
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
                 semaphore.withPermit {
+                    currentCoroutineContext().ensureActive()
                     comicPicImageState.decode(context)
+                    currentCoroutineContext().ensureActive()
                 }
+                if (currentCoroutineContext().isActive) {
+                    onComplete?.invoke()
+                }
+            } catch (e: CancellationException) {
+                // 快速滑动时移出保留窗口属于正常取消，不能把它记成解码失败，
+                // 也不能在取消后继续触发下一批预加载。
+                throw e
             } catch (e: Exception) {
                 log("decode index $index failed: ${e.message}")
+                if (currentCoroutineContext().isActive) {
+                    onComplete?.invoke()
+                }
             }
-            onComplete?.invoke()
         }
-        decodeJobs[index] = job
-        job.invokeOnCompletion { decodeJobs.remove(index) }
+        val registered = synchronized(decodeJobsLock) {
+            // 两次滚动回调可能同时到达，只有第一个任务可以占用该页。
+            if (decodeJobs.containsKey(index)) {
+                false
+            } else {
+                decodeJobs[index] = job
+                true
+            }
+        }
+        if (!registered) {
+            onComplete?.invoke()
+            return
+        }
+        job.invokeOnCompletion {
+            synchronized(decodeJobsLock) {
+                // 旧任务的回调不能删除同一页后来登记的新任务。
+                if (decodeJobs[index] === job) {
+                    decodeJobs.remove(index)
+                }
+            }
+        }
+        job.start()
     }
 
     override fun onCleared() {

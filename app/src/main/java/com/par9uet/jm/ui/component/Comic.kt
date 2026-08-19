@@ -33,6 +33,8 @@ fun Comic(
     selected: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     onToggleSelected: (() -> Unit)? = null,
+    /** 打开详情前清理调用方的编辑/选择状态，避免返回列表后残留旧操作栏。 */
+    onBeforeOpenDetail: () -> Unit = {},
     comicDetailViewModel: ComicDetailViewModel = koinActivityViewModel()
 ) {
     val mainNavController = LocalMainNavController.current
@@ -48,8 +50,11 @@ fun Comic(
                     if (editing && onToggleSelected != null) {
                         onToggleSelected()
                     } else {
+                        onBeforeOpenDetail()
                         comicDetailViewModel.reset(comic.id)
-                        mainNavController.navigate("comicDetail/${comic.id}")
+                        mainNavController.navigate("comicDetail/${comic.id}") {
+                            launchSingleTop = true
+                        }
                     }
                 },
                 onLongClick = {

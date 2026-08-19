@@ -142,14 +142,13 @@ fun LoginScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Logo
-                    Image(
-                        painter = painterResource(id = R.drawable.logo_with_name),
+                    // 应用字标：与启动图标同一套几何字形。
+                    // 用 Icon 而非 Image，让字标跟随主题着色，深色模式下才看得见。
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_logo_foreground),
                         contentDescription = "App Logo",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(837f / 263f),
-                        contentScale = ContentScale.Fit
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(96.dp)
                     )
 
                     // 标题区

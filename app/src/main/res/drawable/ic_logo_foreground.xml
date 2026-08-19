@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  应用图标前景层：几何无衬线的 JM 字标。
+
+  内容限制在 viewport 中心 56×26 的范围内（x 26..82，y 41..67）。
+  自适应图标的安全区是直径 66 的圆，字标四角必须落在圆内，
+  否则在圆形/水滴形启动器上会被裁掉笔画。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- J：笔画宽 6，钩的可见高度约为字高的四分之一。
+         笔画再粗、钩再高，J 就会被读成 U。 -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M41,41 L47,41 L47,67 L29,67 L29,54 L35,54 L35,61 L41,61 Z" />
+    <!-- M -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M53,67 L53,41 L59,41 L66,52 L73,41 L79,41 L79,67 L73,67 L73,51 L66,62 L59,51 L59,67 Z" />
+</vector>

@@ -1,21 +1,29 @@
 package com.par9uet.jm.ui.component
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import com.par9uet.jm.navigation.LocalMainNavController
 import com.par9uet.jm.core.designsystem.theme.ColorFamily
 import com.par9uet.jm.core.designsystem.theme.ExtendedTheme
 
-/** 可点击跳搜索的标签 chip，内容 / 角色 / 作品三种只差色彩 token */
+/**
+ * 可点击跳搜索的标签 chip。
+ *
+ * 描边而非填色：详情页一次会铺开十几个标签，实心色块连成一片会盖过封面
+ * 和标题。三类标签的配色现已统一为中性（见 extendedColorSchemeFor）。
+ */
 @Composable
 private fun ComicTag(label: String, family: ColorFamily) {
     val mainNavController = LocalMainNavController.current
     AssistChip(
-        border = null,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = AssistChipDefaults.assistChipColors(
-            containerColor = family.colorContainer,
+            containerColor = MaterialTheme.colorScheme.surface,
             labelColor = family.onColorContainer,
         ),
         onClick = {

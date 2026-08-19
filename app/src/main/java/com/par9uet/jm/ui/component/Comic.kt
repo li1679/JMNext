@@ -37,9 +37,9 @@ fun Comic(
 ) {
     val mainNavController = LocalMainNavController.current
 
-    // 封面自身就是卡片（圆角 + 轻阴影），不要再套一层 Card 容器：
-    // Card 的 surfaceContainerLow 与页面背景明度过于接近，边界看不见，
-    // 且封面底部的圆角会露出卡片底色形成豁口。
+    // 封面自身就是内容，不再套卡片容器、也不加投影：
+    // 网格里一屏几十张封面，每张都带阴影会让整个页面发灰。
+    // 分隔完全交给留白。
     Column(
         modifier = modifier
             .clip(MaterialTheme.shapes.medium)
@@ -63,7 +63,6 @@ fun Comic(
                 comic = comic,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(2.dp, MaterialTheme.shapes.medium)
                     .then(
                         if (editing && selected) {
                             Modifier.border(

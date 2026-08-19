@@ -53,16 +53,18 @@ object ExtendedTheme {
  * 一个种子即可：整套 ColorScheme（含 surface / background / outline / scrim 等
  * 全部 role）都由它经 HCT 色调板推导，不要退回手工逐个覆盖强调色——
  * 那样 surface 系列不会跟着变，各预设的整体观感会趋同。
+ *
+ * 默认预设不在此列：它是手写的中性色板（[MinimalLightColorScheme]），
+ * 种子推导做不到真正无彩的 surface。
  */
 private val PRESET_SEEDS: Map<String, Color> = mapOf(
-    COLOR_PALETTE_PRESET_DEFAULT to Color(0xFF4F5F7F),
     COLOR_PALETTE_PRESET_OCEAN to Color(0xFF00696D),
     COLOR_PALETTE_PRESET_SUNSET to Color(0xFF8C5000),
     COLOR_PALETTE_PRESET_FOREST to Color(0xFF2E6B3E),
     COLOR_PALETTE_PRESET_LAVENDER to Color(0xFF6750A4),
 )
 
-private val FALLBACK_SEED = PRESET_SEEDS.getValue(COLOR_PALETTE_PRESET_DEFAULT)
+private val FALLBACK_SEED = Color(0xFF4F5F7F)
 
 @Composable
 fun AppTheme(
@@ -79,10 +81,16 @@ fun AppTheme(
     // 仅当用户选择「莫奈取色」预设时才用系统动态色，其余一律走种子色推导
     val supportDynamic = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val useMonet = setting.colorPalettePreset == COLOR_PALETTE_PRESET_MONET && supportDynamic
+    // 默认预设 + 未自定义主色时走极简中性板；一旦用户自己取了色，
+    // 说明他要的就是彩色，此时回到种子推导
+    val useMinimal = setting.colorPalettePreset == COLOR_PALETTE_PRESET_DEFAULT &&
+        setting.customColorPrimary.isNullOrBlank()
 
     val colorScheme: ColorScheme = when {
         useMonet && isDark -> dynamicDarkColorScheme(context)
         useMonet -> dynamicLightColorScheme(context)
+        useMinimal && isDark -> MinimalDarkColorScheme
+        useMinimal -> MinimalLightColorScheme
         else -> rememberDynamicColorScheme(
             seedColor = setting.seedColor(),
             isDark = isDark,

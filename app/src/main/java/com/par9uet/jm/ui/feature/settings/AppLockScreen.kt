@@ -394,6 +394,10 @@ fun PatternLockInput(
             triggerShake()
         }
     }
+    // 图案的配色取自主题，不要写死：主题换成中性色板后写死的紫色会格外突兀
+    val patternAccent = MaterialTheme.colorScheme.primary
+    val patternError = MaterialTheme.colorScheme.error
+    val patternDotEmpty = MaterialTheme.colorScheme.outline
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -436,7 +440,10 @@ fun PatternLockInput(
                 drawPattern(
                     selectedDots = selectedDots.toList(),
                     currentTouch = currentTouch,
-                    isError = isError
+                    isError = isError,
+                    accent = patternAccent,
+                    errorColor = patternError,
+                    dotEmptyColor = patternDotEmpty
                 )
             }
         }
@@ -460,13 +467,14 @@ private fun computeDotCenters(size: androidx.compose.ui.geometry.Size): List<Off
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPattern(
     selectedDots: List<Int>,
     currentTouch: Offset?,
-    isError: Boolean
+    isError: Boolean,
+    accent: Color,
+    errorColor: Color,
+    dotEmptyColor: Color
 ) {
     val centers = computeDotCenters(size)
-    val accent = Color(0xFF6750A4)
-    val lineColor = if (isError) Color.Red else accent
-    val dotFillColor = if (isError) Color.Red else accent
-    val dotEmptyColor = Color(0xFF9E9E9E)
+    val lineColor = if (isError) errorColor else accent
+    val dotFillColor = if (isError) errorColor else accent
 
     // 连接线
     if (selectedDots.isNotEmpty()) {

@@ -2,6 +2,7 @@ package com.par9uet.jm.ui.feature.home
 
 import com.par9uet.jm.navigation.LocalMainNavController
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -86,7 +87,7 @@ private fun HomeSkeleton(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 16.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         HomeHeader(
@@ -120,7 +121,7 @@ private fun HomeSkeleton(
             // 列数与间距必须与真实网格（adaptiveComicGridCells + 12dp）一致，
             // 否则加载完成时布局会整体跳动
             maxItemsInEachRow = columns,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Top)
         ) {
             for (i in 0 until columns * 6) {
@@ -270,8 +271,8 @@ private fun HomeComicGrid(
         modifier = Modifier.fillMaxSize(),
         columns = columns,
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Top),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 16.dp)
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 20.dp)
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) { header() }
         items(items = comicList, key = { it.id }) {
@@ -319,58 +320,51 @@ private fun HomeHeader(
     onExtract: () -> Unit,
     onSign: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // 标题直接坐在页面底色上，不套彩色容器：
+        // 首屏最显眼的位置留给内容，层级由字号、字重和留白建立。
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = TEXT_DISCOVER,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = categoryTitle.ifBlank { TEXT_FEATURED },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(MaterialTheme.shapes.extraLarge),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            tonalElevation = 2.dp
+                .height(48.dp)
+                .clip(MaterialTheme.shapes.medium)
+                .clickable(onClick = onSearch),
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = TEXT_DISCOVER,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = categoryTitle.ifBlank { TEXT_FEATURED },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .clip(MaterialTheme.shapes.large)
-                        .clickable(onClick = onSearch),
-                    color = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            modifier = Modifier.weight(1f),
-                            text = TEXT_SEARCH_HINT,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    modifier = Modifier.weight(1f),
+                    text = TEXT_SEARCH_HINT,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -450,16 +444,22 @@ private fun HomeQuickAction(
         modifier = modifier
             .height(46.dp)
             .clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Spacer(Modifier.width(6.dp))
             Text(
                 text = label,

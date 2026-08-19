@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.par9uet.jm.R
@@ -41,6 +42,24 @@ private fun TabDestination.TabIcon() {
 private fun currentTabRoute(navController: NavHostController): String? {
     val backStackEntryState by navController.currentBackStackEntryAsState()
     return backStackEntryState?.destination?.route
+}
+
+/**
+ * 切换主 Tab。
+ *
+ * 三个参数缺一不可：
+ * - `saveState` / `restoreState`：不带的话，每次切走都会销毁该页，切回来是全新的一份，
+ *   首页的滚动位置、分类选中项、已加载的列表全部要从头再来；
+ * - `popUpTo` 起始页：否则「首页→收藏→首页→收藏」会一路往返回栈里堆，
+ *   退出应用得连按好几次返回键；
+ * - `launchSingleTop`：重复点当前 Tab 不再入栈。
+ */
+private fun NavHostController.switchTab(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
 }
 
 @Composable
@@ -69,7 +88,7 @@ fun BottomNavigationBarComponent() {
                     selected = currentRoute == destination.route,
                     onClick = {
                         if (currentRoute != destination.route) {
-                            tabNavController.navigate(destination.route)
+                            tabNavController.switchTab(destination.route)
                         }
                     }
                 )
@@ -102,7 +121,7 @@ fun NavigationRailComponent() {
                 selected = currentRoute == destination.route,
                 onClick = {
                     if (currentRoute != destination.route) {
-                        tabNavController.navigate(destination.route)
+                        tabNavController.switchTab(destination.route)
                     }
                 }
             )

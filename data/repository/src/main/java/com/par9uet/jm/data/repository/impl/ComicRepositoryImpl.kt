@@ -575,7 +575,7 @@ class ComicRepositoryImpl(
         val imageUrl = fixImageUrl(image.getDownloadUrl())
         return withContext(Dispatchers.IO) {
             try {
-                logError("ComicRepositoryImpl", "下载图片 comicId=$comicId index=$imageIndex URL=$imageUrl")
+                log("ComicRepositoryImpl", "下载图片 comicId=$comicId index=$imageIndex URL=$imageUrl")
                 val request = buildImageRequest(imageUrl)
                 cleanHttpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {

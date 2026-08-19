@@ -4,6 +4,7 @@ import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.network.model.ResponseWrapper
 import com.par9uet.jm.core.common.InitManager
 import com.par9uet.jm.core.common.logError
+import kotlinx.coroutines.CancellationException
 import retrofit2.HttpException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -24,6 +25,8 @@ open class BaseRepository(
                 logError(this::class.java.simpleName, "API 返回错误: $errMsg")
                 NetWorkResult.Error(errMsg)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             handleException(e)
         }
@@ -33,6 +36,10 @@ open class BaseRepository(
         return try {
             val response = apiCall()
             NetWorkResult.Success(response)
+        } catch (e: CancellationException) {
+            // 页面关闭时正在飞行的请求会被取消，属正常流程。
+            // 捕获它会吞掉取消信号，还会把「已取消」记成请求失败。
+            throw e
         } catch (e: Exception) {
             handleException(e)
         }

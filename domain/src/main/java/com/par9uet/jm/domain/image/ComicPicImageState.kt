@@ -25,6 +25,7 @@ import com.par9uet.jm.core.common.WEBP_QUALITY_CACHE
 import com.par9uet.jm.core.common.calculateScrambleSeed
 import com.par9uet.jm.core.common.compressWebpCompat
 import com.par9uet.jm.core.common.logError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -50,9 +51,8 @@ class ComicPicImageState(
     private val picImageLoader: ImageLoader,
     private val imageFetcher: (suspend () -> ByteArray?)? = null,
     /**
-     * 解扰计算使用的 aid，即 photo 页面里的 `var aid`。
-     * 禁漫的分块数由 aid 而非本子 id 决定，多章本子两者并不相同，
-     * 传错会导致整章错版。取值 <= 0 时回退到 comicId 保持旧行为。
+     * 解扰用的 aid（photo 页面里的 `var aid`），与本子 id 在多章本子上不同，传错会整章错版。
+     * <= 0 时回退到 comicId。
      */
     val __aId: Int = 0,
 ) {
@@ -63,12 +63,7 @@ class ComicPicImageState(
 
     var imageResultState by mutableStateOf<ImageResultState>(ImageResultState.Loading)
 
-    /**
-     * 释放已解码的位图引用，把这一页退回未加载状态。
-     *
-     * 只丢引用，绝不调用 [Bitmap.recycle]：这张位图可能正被 Compose 绘制，
-     * 主动回收会触发 "trying to use a recycled bitmap" 崩溃。
-     */
+    /** 释放位图引用并退回未加载态。只丢引用不 recycle：该位图可能正被 Compose 绘制。 */
     fun release() {
         imageResultState = ImageResultState.Loading
     }
@@ -78,6 +73,11 @@ class ComicPicImageState(
             imageResultState = ImageResultState.Loading
             try {
                 decodeImage(context)
+            } catch (e: CancellationException) {
+                // 快速翻页时，上一批预加载会被成批取消，这是正常流程而非故障。
+                // 必须原样抛出：捕获它等于吞掉协程的取消信号，
+                // 记成错误还会让日志里刷满并不存在的失败。
+                throw e
             } catch (e: OutOfMemoryError) {
                 logError("ComicPicImage", "解码图片内存不足: ${e.message}")
                 imageResultState = ImageResultState.Failure("内存不足，无法解码图片")
@@ -169,11 +169,8 @@ class ComicPicImageState(
     }
 
     /**
-     * 按分块数还原图片并写入缓存。seed 为 0 表示该图无需解扰。
-     * 两条加载路径（Coil / 内置 API 回退）共用，避免解扰判断出现分叉。
-     *
-     * [ownsOriginal] 表示原图是否归本方独占。来自 Coil 的位图由其内存缓存持有，
-     * 回收后缓存再次命中时拿到的就是废图，会崩在 "trying to use a recycled bitmap"。
+     * 按分块数还原并写入缓存，seed 为 0 表示无需解扰。
+     * [ownsOriginal]：来自 Coil 的位图归其内存缓存所有，回收后缓存再命中会拿到废图而崩溃。
      */
     private suspend fun processBitmap(
         originalBitmap: Bitmap,
@@ -194,6 +191,8 @@ class ComicPicImageState(
             }
             saveBitmapAsWebp(finalBitmap, cacheFile)
             ImageResultState.Success(finalBitmap.asImageBitmap(), aspectRatio)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: OutOfMemoryError) {
             logError("ComicPicImage", "图片处理内存不足: ${e.message}")
             ImageResultState.Failure("内存不足")

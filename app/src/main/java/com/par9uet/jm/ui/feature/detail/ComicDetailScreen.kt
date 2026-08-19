@@ -517,7 +517,6 @@ fun ComicDetailScreen(
         return
     }
 
-    // Loading skeleton
     if (comicDetailState.isLoading && comicDetailState.data == null) {
         ComicDetailSkeleton()
         return
@@ -778,15 +777,23 @@ private fun ComicDetailBottomBar(
         shadowElevation = 3.dp,
         color = MaterialTheme.colorScheme.surfaceContainer
     ) {
-        Row(
+        val lastReadChapterId = readHistoryManager.lastReadChapterId(comic, readHistory)
+        val readLabel = if (lastReadChapterId != null) "继续阅读" else "开始阅读"
+        // 图标与主操作分两行。
+        // 原先四个图标按钮与「章节」「开始阅读」挤在同一行，窄屏或放大字体时
+        // 主按钮拿不到足够宽度，四个字会断成两行。分行后无论屏宽都能完整显示，
+        // 主操作也拿到了整行的视觉权重。
+        Column(
             modifier = Modifier
                 .navigationBarsPadding()
-                .defaultMinSize(minHeight = 80.dp)
-                .padding(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 IconButton(onClick = onLike) {
                     if (comic.isLike) {
                         Icon(Icons.Default.Favorite, contentDescription = "已喜欢", tint = MaterialTheme.colorScheme.error)
@@ -808,27 +815,24 @@ private fun ComicDetailBottomBar(
                     Icon(Icons.Default.Download, contentDescription = "缓存")
                 }
             }
-            Spacer(modifier = Modifier.weight(1f))
-            val lastReadChapterId = readHistoryManager.lastReadChapterId(comic, readHistory)
             if (comic.comicChapterList.isEmpty()) {
-                // Button 默认即 pill 形，显式设 CircleShape 会把宽按钮两端压成正半圆
-                Button(onClick = { onRead(lastReadChapterId ?: comic.id) }) {
-                    Text(if (lastReadChapterId != null) "继续阅读" else "开始阅读")
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onRead(lastReadChapterId ?: comic.id) }
+                ) {
+                    Text(readLabel, maxLines = 1)
                 }
             } else {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 「章节」是次要操作，用 Outlined 与主操作拉开层级
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // 「章节」是次要操作，用 Outlined 与主操作拉开层级，宽度也只占三分之一
                     OutlinedButton(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        modifier = Modifier.weight(1f),
                         onClick = onChapters
                     ) {
-                        Text("章节")
+                        Text("章节", maxLines = 1)
                     }
                     Button(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        modifier = Modifier.weight(2f),
                         onClick = {
                             val targetChapterId = lastReadChapterId
                                 ?: comic.comicChapterList.firstOrNull()?.id
@@ -836,7 +840,7 @@ private fun ComicDetailBottomBar(
                             onRead(targetChapterId)
                         }
                     ) {
-                        Text(if (lastReadChapterId != null) "继续阅读" else "开始阅读")
+                        Text(readLabel, maxLines = 1)
                     }
                 }
             }

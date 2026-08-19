@@ -44,6 +44,8 @@ import com.par9uet.jm.ui.feature.detail.ComicCommentScreen
 
 import com.par9uet.jm.ui.feature.detail.ComicChapterScreen
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -88,6 +90,13 @@ fun AppScreen(
             modifier = Modifier.fillMaxSize(),
             navController = mainNavController,
             startDestination = "tab/home",
+            // Navigation Compose 默认保留退出页面 700ms 做淡出；返回时它仍位于
+            // 新页面上方并参与命中测试，会触发已经不可见的详情页按钮。
+            // 页面切换立即完成，确保旧页面同步退出组合与点击命中树。
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None },
         ) {
             composable(
                 route = "tab/{tabName}?",

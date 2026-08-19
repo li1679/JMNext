@@ -8,7 +8,8 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
+# 多模块工程下每个模块都有自己的 build/，不能只忽略根目录那一个
+build/
 /captures
 .externalNativeBuild
 .cxx

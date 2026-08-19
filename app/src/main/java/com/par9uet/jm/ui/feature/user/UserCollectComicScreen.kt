@@ -186,9 +186,9 @@ fun UserCollectComicScreen(
     // 当前激活的筛选项数量，用于在筛选按钮上展示
     val activeFilterCount = collectComicFilter.selectedTags.size + collectComicFilter.selectedAuthors.size
 
+    // 只在首次进入时统计；排序、收藏夹切换与收藏变更会各自触发重算
     LaunchedEffect(Unit) {
-        userViewModel.refreshCollectTagCounts()
-        userViewModel.refreshFolderList()
+        userViewModel.ensureCollectMeta()
     }
 
     // 主体内容：搜索栏 + 收藏夹 Chip + 排序 + 漫画网格

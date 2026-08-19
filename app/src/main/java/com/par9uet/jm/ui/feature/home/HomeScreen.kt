@@ -154,8 +154,9 @@ fun HomeScreen(
         }
     }
 
+    // 只在首次进入或数据源变更时请求；从其它页面返回不重新拉取
     LaunchedEffect(localSetting.comicApiSource) {
-        comicViewModel.getHomeComic()
+        comicViewModel.ensureHomeComic(localSetting.comicApiSource)
     }
 
     if (homeComicState.list.isEmpty() && homeComicState.isLoading) {
@@ -204,7 +205,7 @@ fun HomeScreen(
         PullToRefreshBox(
             modifier = Modifier.fillMaxSize(),
             isRefreshing = homeComicState.isLoading,
-            onRefresh = { comicViewModel.getHomeComic() }
+            onRefresh = { comicViewModel.refreshHomeComic() }
         ) {
             HomeComicGrid(
                 columns = adaptiveComicGridCells(localSetting.homeGridColumns),
@@ -240,7 +241,7 @@ fun HomeScreen(
         PullToRefreshBox(
             modifier = Modifier.fillMaxSize(),
             isRefreshing = homeComicState.isLoading,
-            onRefresh = { comicViewModel.getHomeComic() }
+            onRefresh = { comicViewModel.refreshHomeComic() }
         ) {
             HomeComicGrid(
                 columns = adaptiveComicGridCells(localSetting.homeGridColumns),

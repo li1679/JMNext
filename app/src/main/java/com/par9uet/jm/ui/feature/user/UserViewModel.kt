@@ -215,6 +215,8 @@ class UserViewModel(
                 else "成功 $success 部，失败 $fail 部"
             )
             clearCollectSelection()
+            // 收藏内容变了，筛选统计要跟着更新（原先靠离开页面再回来时的重刷来兜底）
+            if (success > 0) refreshCollectTagCounts()
         }
     }
 
@@ -240,6 +242,7 @@ class UserViewModel(
                 else "成功 $success 部，失败 $fail 部"
             )
             clearCollectSelection()
+            if (success > 0) refreshCollectTagCounts()
         }
     }
 
@@ -329,7 +332,24 @@ class UserViewModel(
             }
             _collectTagCounts.value = tagCounts.toSortedMap()
             _collectAuthorCounts.value = authorCounts.toSortedMap()
+            collectMetaLoaded = true
         }
+    }
+
+    /** 收藏页的筛选统计是否已经算过 */
+    private var collectMetaLoaded = false
+
+    /**
+     * 收藏页进入时的按需加载。
+     *
+     * [refreshCollectTagCounts] 为了统计标签分布会把收藏最多翻 100 页拉一遍，
+     * 每次进入页面都跑一次代价过高。排序、收藏夹切换以及收藏内容变更都会各自
+     * 触发重算，所以这里只负责首次加载。
+     */
+    fun ensureCollectMeta() {
+        if (collectMetaLoaded) return
+        refreshCollectTagCounts()
+        refreshFolderList()
     }
 
     private val _historyRefreshVersion = MutableStateFlow(0)

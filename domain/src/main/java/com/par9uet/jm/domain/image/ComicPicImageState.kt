@@ -3,6 +3,7 @@ package com.par9uet.jm.domain.image
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -127,7 +128,12 @@ class ComicPicImageState(
 
         when (val result = picImageLoader.execute(request)) {
             is SuccessResult -> {
-                imageResultState = processBitmap(result.drawable.toBitmap(), seed, cacheFile)
+                val drawable = result.drawable
+                // BitmapDrawable 时 toBitmap() 直接返回底层位图，而那张图归 Coil 的
+                // 内存缓存所有；其余类型才是这里新建的，可以安全回收。
+                val bitmap = drawable.toBitmap()
+                val owns = drawable !is BitmapDrawable || drawable.bitmap !== bitmap
+                imageResultState = processBitmap(bitmap, seed, cacheFile, ownsOriginal = owns)
             }
 
             is ErrorResult -> {
@@ -143,7 +149,9 @@ class ComicPicImageState(
                         val originalBitmap = BitmapFactory
                             .decodeByteArray(fetchedBytes, 0, fetchedBytes.size)
                         if (originalBitmap != null) {
-                            imageResultState = processBitmap(originalBitmap, seed, cacheFile)
+                            // 这张位图由本方解码，无人共享，可以回收
+                            imageResultState =
+                                processBitmap(originalBitmap, seed, cacheFile, ownsOriginal = true)
                             return
                         }
                     } catch (e: OutOfMemoryError) {
@@ -163,11 +171,15 @@ class ComicPicImageState(
     /**
      * 按分块数还原图片并写入缓存。seed 为 0 表示该图无需解扰。
      * 两条加载路径（Coil / 内置 API 回退）共用，避免解扰判断出现分叉。
+     *
+     * [ownsOriginal] 表示原图是否归本方独占。来自 Coil 的位图由其内存缓存持有，
+     * 回收后缓存再次命中时拿到的就是废图，会崩在 "trying to use a recycled bitmap"。
      */
     private suspend fun processBitmap(
         originalBitmap: Bitmap,
         seed: Int,
-        cacheFile: File
+        cacheFile: File,
+        ownsOriginal: Boolean
     ): ImageResultState {
         return try {
             val aspectRatio = originalBitmap.width * 1.0f / originalBitmap.height
@@ -175,8 +187,10 @@ class ComicPicImageState(
                 originalBitmap
             } else {
                 // 解扰产出同尺寸新位图，原图随即无人引用。
-                // 这是链路上唯一能确定原图已无用的位置，不回收则峰值翻倍。
-                decodeBitmap(originalBitmap, seed).also { originalBitmap.recycle() }
+                // 但只有独占它时才能回收，否则会波及 Coil 的内存缓存。
+                decodeBitmap(originalBitmap, seed).also {
+                    if (ownsOriginal) originalBitmap.recycle()
+                }
             }
             saveBitmapAsWebp(finalBitmap, cacheFile)
             ImageResultState.Success(finalBitmap.asImageBitmap(), aspectRatio)

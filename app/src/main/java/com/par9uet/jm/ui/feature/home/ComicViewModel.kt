@@ -39,7 +39,30 @@ class ComicViewModel(
 
     private val _homeComicState = MutableStateFlow(HomeComicUIState())
     val homeComicState = _homeComicState.asStateFlow()
-    fun getHomeComic() {
+
+    /** 已成功加载过首页数据时所用的数据源，null 表示尚未加载成功 */
+    private var loadedApiSource: String? = null
+
+    /**
+     * 首页数据的按需加载。
+     *
+     * 首页是 Tab 页，导航到别处再返回时 NavHost 会重建这个 composable，
+     * 伴随的 LaunchedEffect 也会重跑。若在那里直接请求网络，用户每次从
+     * 详情页、收藏、签到等页面退回来都会看到首页整个重刷一遍。
+     * 因此这里只在「还没加载成功」或「数据源确实变了」时才发请求，
+     * 其余情况直接复用已有数据；主动刷新走 [refreshHomeComic]。
+     */
+    fun ensureHomeComic(apiSource: String) {
+        if (loadedApiSource == apiSource && _homeComicState.value.list.isNotEmpty()) return
+        loadHomeComic(apiSource)
+    }
+
+    /** 下拉刷新：无条件重新请求 */
+    fun refreshHomeComic() {
+        loadHomeComic(localSettingManager.localSettingState.value.comicApiSource)
+    }
+
+    private fun loadHomeComic(apiSource: String) {
         viewModelScope.launch {
             _homeComicState.update {
                 it.copy(
@@ -56,6 +79,8 @@ class ComicViewModel(
                 }
 
                 is NetWorkResult.Success<List<HomeSwiperComicListItemResponse>> -> {
+                    // 只有成功才记录数据源，失败时下次进入应当重试
+                    loadedApiSource = apiSource
                     _homeComicState.update {
                         it.copy(list = data.data.map { item -> item.toHomeComicSwiperItem() })
                     }

@@ -103,7 +103,7 @@ fun SignInScreen(
     userManager: UserManager = getKoin().get()
 ) {
     val mainNavController = LocalMainNavController.current
-    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     val daysOfWeek = remember { daysOfWeek() }
     val currentMonth = remember(today) { today.yearMonth }

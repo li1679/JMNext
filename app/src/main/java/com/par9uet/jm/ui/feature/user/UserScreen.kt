@@ -324,7 +324,7 @@ fun UserScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val userState by userManager.userState.collectAsStateWithLifecycle()
-    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
     val remoteSetting by remoteSettingManager.remoteSettingState.collectAsStateWithLifecycle()
     val mainNavController = LocalMainNavController.current
 

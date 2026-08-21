@@ -16,7 +16,7 @@ import org.koin.dsl.module
 
 /** 服务层：跨页面共享的业务状态、下载编排与图片加载器。 */
 val domainModule = module {
-    single { UserManager(get(), get(), get(), get()) } bind AppInitTask::class
+    single { UserManager(get(), get(), get(), get(), get()) } bind AppInitTask::class
     single { RemoteSettingManager(get()) } bind AppInitTask::class
     single { HistorySearchManager(get()) } bind AppInitTask::class
     single { ReadHistoryManager(get()) } bind AppInitTask::class

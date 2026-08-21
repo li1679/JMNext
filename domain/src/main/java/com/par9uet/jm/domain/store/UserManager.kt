@@ -11,7 +11,11 @@ import com.par9uet.jm.core.common.AppInitTask
 import com.par9uet.jm.core.common.AppTaskInfo
 import com.par9uet.jm.core.model.CommonUIState
 import com.par9uet.jm.core.common.log
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -20,12 +24,27 @@ class UserManager(
     private val userStorage: UserStorage,
     private val cookieStorage: CookieStorage,
     private val userRepository: UserRepository,
-    private val retrofit: Retrofit
+    private val retrofit: Retrofit,
+    private val scope: CoroutineScope,
 ) : AppInitTask {
     private val _userState = MutableStateFlow(CommonUIState<User>())
     val userState = _userState.asStateFlow()
 
-    val isLoginState = _userState.map { (it.data?.id ?: 0) > 0 }
+    /**
+     * 是否已登录。
+     *
+     * 必须是有当前值的 StateFlow：做成冷 Flow 的话，每个收集点都得自己传一个
+     * 初始值（此前一律传 false），而收集开始得晚一拍时，
+     * 依赖它的 `LaunchedEffect(isLogin)` 就会拿着这个假的 false 先跑一遍——
+     * 表现为已登录用户打开评论页却被弹去登录页。
+     */
+    val isLoginState: StateFlow<Boolean> = _userState
+        .map { (it.data?.id ?: 0) > 0 }
+        .stateIn(
+            scope,
+            SharingStarted.Eagerly,
+            (_userState.value.data?.id ?: 0) > 0
+        )
 
     private val appTaskInfo = AppTaskInfo(
         taskName = "加载上次退出前保存的用户信息",

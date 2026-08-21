@@ -180,7 +180,7 @@ fun ComicDetailScreen(
     val mainNavController = LocalMainNavController.current
     val comicDetailState by comicDetailViewModel.comicDetailState.collectAsStateWithLifecycle()
     val readHistory by readHistoryManager.readHistoryState.collectAsStateWithLifecycle()
-    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
     var showDownloadChapterDialog by remember { mutableStateOf(false) }
     var selectedChapterIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
 

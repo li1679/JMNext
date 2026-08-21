@@ -70,7 +70,7 @@ fun LoginScreen(
     val mainNavController = LocalMainNavController.current
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
-    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
     val loginState by userViewModel.loginState.collectAsStateWithLifecycle()
 
     // 返回：若无可返回的页面则退回主页 tab

@@ -92,7 +92,7 @@ fun ComicReadScreen(
     val size = comicReadViewModel.size
     var currentIndexState by comicReadViewModel.currentIndexState
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
-    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
     val comicPicState by comicReadViewModel.comicPicState.collectAsStateWithLifecycle()
     val comicDetailState by comicReadViewModel.comicDetailState.collectAsStateWithLifecycle()
     val localChapterList by comicReadViewModel.localChapterList.collectAsStateWithLifecycle()

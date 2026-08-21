@@ -81,7 +81,7 @@ fun WelcomeScreen(
     userViewModel: UserViewModel = koinActivityViewModel(),
 ) {
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
-    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
     val loginState by userViewModel.loginState.collectAsStateWithLifecycle()
 
     var step by remember { mutableStateOf(0) }

@@ -141,7 +141,7 @@ fun HomeScreen(
 ) {
     val mainNavController = LocalMainNavController.current
     val homeComicState by comicViewModel.homeComicState.collectAsStateWithLifecycle()
-    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     val onSearch = {
         // 搜索 ViewModel 是 Activity 级别的，首页入口代表新的搜索会话。

@@ -38,7 +38,7 @@ fun TabScreen(
     val mainNavController = LocalMainNavController.current
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     CompositionLocalProvider(
         LocalTabNavController provides tabNavController,

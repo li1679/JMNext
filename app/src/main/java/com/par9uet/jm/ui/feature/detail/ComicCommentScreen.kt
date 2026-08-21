@@ -241,7 +241,7 @@ fun ComicCommentArea(
 ) {
     val focusManager = LocalFocusManager.current
     val mainNavController = LocalMainNavController.current
-    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
     val commentInputFocusRequester = remember { FocusRequester() }
     val commentLazyPagingItems = comicDetailViewModel.commentPager.collectAsLazyPagingItems()
     val likedCommentIds by comicDetailViewModel.likedCommentIds.collectAsStateWithLifecycle()

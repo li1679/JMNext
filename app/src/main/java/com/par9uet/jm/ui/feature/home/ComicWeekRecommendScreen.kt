@@ -8,9 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.HorizontalDivider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -74,8 +74,8 @@ private fun ComicWeekCategorySelect(
 fun ComicWeekRecommendScreen(
     comicViewModel: ComicViewModel = koinActivityViewModel()
 ) {
-    val weekDataState by comicViewModel.weekDataState.collectAsState()
-    val weekFilterState by comicViewModel.weekFilterState.collectAsState()
+    val weekDataState by comicViewModel.weekDataState.collectAsStateWithLifecycle()
+    val weekFilterState by comicViewModel.weekFilterState.collectAsStateWithLifecycle()
     val weekRecommendComicPagingItems = comicViewModel.weekComicPager.collectAsLazyPagingItems()
     val weekCategoryFilter by remember(weekFilterState) {
         derivedStateOf {

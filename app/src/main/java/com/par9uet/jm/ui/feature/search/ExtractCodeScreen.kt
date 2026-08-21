@@ -30,9 +30,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,7 +72,7 @@ fun ExtractCodeScreen(
 ) {
     val mainNavController = LocalMainNavController.current
     val clipboardManager = LocalClipboardManager.current
-    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsState()
+    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsStateWithLifecycle()
 
     var inputText by remember { mutableStateOf("") }
     var extractedCode by remember { mutableStateOf<String?>(null) }

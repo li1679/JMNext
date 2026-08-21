@@ -57,9 +57,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -98,16 +98,16 @@ import org.koin.compose.getKoin
 import org.koin.compose.viewmodel.koinActivityViewModel
 
 /** 头图里小封面的宽度 */
-private val HEADER_COVER_WIDTH = 112.dp
+internal val HEADER_COVER_WIDTH = 112.dp
 
 /** 简介收起时显示的行数 */
-private const val DESCRIPTION_COLLAPSED_LINES = 4
+internal const val DESCRIPTION_COLLAPSED_LINES = 4
 
 /**
  * 大数字用中文习惯的「万」缩写。
  * 浏览量动辄五六位，原样铺开会把标题挤掉，也不好扫读。
  */
-private fun formatCount(value: Int): String = when {
+internal fun formatCount(value: Int): String = when {
     value >= 10_000 -> {
         val wan = value / 10_000
         val decimal = (value % 10_000) / 1_000
@@ -124,11 +124,11 @@ private fun formatCount(value: Int): String = when {
  * 也有效果的是「把封面按 32px 请求再拉满」——放大本身就产生柔和色块，
  * 而且解码的是一张极小的图，内存代价几乎为零。31+ 再叠一层真模糊让边缘更顺。
  */
-private fun Modifier.backdropBlur(): Modifier =
+internal fun Modifier.backdropBlur(): Modifier =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) this.blur(24.dp) else this
 
 @Composable
-private fun ComicStat(
+internal fun ComicStat(
     icon: ImageVector,
     label: String,
     value: Int,
@@ -168,294 +168,6 @@ private fun ComicStat(
     }
 }
 
-/**
- * 详情页头图：模糊封面铺底 + 小封面 + 标题/作者/统计并排。
- *
- * 封面不铺满宽度：3:4 全宽会占掉约 70% 首屏，把标题、标签、按钮全推到折叠线以下。
- */
-@Composable
-private fun ComicDetailHeader(
-    comic: Comic,
-    onAuthorClick: (String) -> Unit,
-    remoteSettingManager: RemoteSettingManager = getKoin().get(),
-    imageLoader: ImageLoader = getKoin().get(),
-) {
-    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsState()
-    val context = LocalContext.current
-    val surface = MaterialTheme.colorScheme.surface
-    val coverUrl = "${remoteSetting.imgHost}/media/albums/${comic.id}_3x4.jpg"
-
-    Box(modifier = Modifier.fillMaxWidth()) {
-        AsyncImage(
-            model = remember(coverUrl) {
-                ImageRequest.Builder(context).data(coverUrl).size(32).build()
-            },
-            imageLoader = imageLoader,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .matchParentSize()
-                .backdropBlur()
-        )
-        // 遮罩：顶部与底部压回 surface，中段留出一点透，
-        // 这样上接顶栏、下接正文都没有硬边界，而每本书又带上了自己的色调
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to surface,
-                        0.28f to surface.copy(alpha = 0.55f),
-                        1f to surface
-                    )
-                )
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            ComicCoverImage(
-                comic = comic,
-                modifier = Modifier.width(HEADER_COVER_WIDTH)
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = comic.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    comic.authorList.forEach {
-                        key(it) {
-                            Text(
-                                modifier = Modifier.clickable(onClick = { onAuthorClick(it) }),
-                                text = it,
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                }
-                Text(
-                    text = "JM${comic.id}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    ComicStat(Icons.Default.Favorite, "喜欢", comic.likeCount)
-                    ComicStat(Icons.Default.RemoveRedEye, "浏览", comic.readCount)
-                }
-            }
-        }
-    }
-}
-
-/** 带行首标题的标签分组。没有分组标题时，三排不同颜色的 chip 用户根本不知道各代表什么。 */
-@Composable
-private fun TagGroup(
-    title: String,
-    tags: List<String>,
-    tag: @Composable (String) -> Unit,
-) {
-    if (tags.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            tags.forEach { key(it) { tag(it) } }
-        }
-    }
-}
-
-/** 简介。数据里一直有 description 字段，但详情页从来没显示过。 */
-@Composable
-private fun ComicDescription(description: String) {
-    if (description.isBlank()) return
-    var expanded by remember(description) { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = "简介",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = if (expanded) Int.MAX_VALUE else DESCRIPTION_COLLAPSED_LINES,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.clickable { expanded = !expanded }
-        )
-        if (!expanded) {
-            Text(
-                text = "展开",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { expanded = true }
-            )
-        }
-    }
-}
-
-@Composable
-private fun ComicDetailSkeleton() {
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // 骨架屏要占住真实布局的位置，否则加载完成时内容会整体跳动
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Box(
-                    modifier = Modifier
-                        .width(HEADER_COVER_WIDTH)
-                        .aspectRatio(3f / 4f)
-                        .clip(MaterialTheme.shapes.medium)
-                        .shimmer()
-                )
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(28.dp)
-                            .clip(MaterialTheme.shapes.extraSmall)
-                            .shimmer()
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.5f)
-                            .height(20.dp)
-                            .clip(MaterialTheme.shapes.extraSmall)
-                            .shimmer()
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.8f)
-                            .height(36.dp)
-                            .clip(MaterialTheme.shapes.extraSmall)
-                            .shimmer()
-                    )
-                }
-            }
-            repeat(3) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(if (it == 2) 0.6f else 1f)
-                        .height(32.dp)
-                        .clip(MaterialTheme.shapes.extraSmall)
-                        .shimmer()
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ComicDetailErrorPage(
-    errorMessage: String?,
-    onRetry: () -> Unit,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Error,
-                contentDescription = "加载失败",
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.error
-            )
-            Text(
-                text = errorMessage ?: "加载失败，请稍后重试",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Button(onClick = onRetry) {
-                Text("重试")
-            }
-            TextButton(onClick = onBack) {
-                Text("返回")
-            }
-        }
-    }
-}
-
-/** 详情页正文：头图之外的所有分节，手机与平板布局共用 */
-@Composable
-private fun ComicDetailSections(
-    comic: Comic,
-    onTagSearch: (String) -> Unit,
-    onComments: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        ComicDescription(comic.description)
-        TagGroup("标签", comic.tagList) { ComicContentTag(it) }
-        TagGroup("角色", comic.roleList) { ComicRoleTag(it) }
-        TagGroup("作品", comic.workList) { ComicWorkTag(it) }
-        HorizontalDivider()
-        Surface(
-            onClick = onComments,
-            shape = MaterialTheme.shapes.medium,
-            color = Color.Transparent,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    Icons.Default.ChatBubbleOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "评论",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = if (comic.commentCount > 0) formatCount(comic.commentCount) else "暂无",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComicDetailScreen(
@@ -466,9 +178,9 @@ fun ComicDetailScreen(
     userManager: UserManager = getKoin().get()
 ) {
     val mainNavController = LocalMainNavController.current
-    val comicDetailState by comicDetailViewModel.comicDetailState.collectAsState()
-    val readHistory by readHistoryManager.readHistoryState.collectAsState()
-    val isLogin by userManager.isLoginState.collectAsState(false)
+    val comicDetailState by comicDetailViewModel.comicDetailState.collectAsStateWithLifecycle()
+    val readHistory by readHistoryManager.readHistoryState.collectAsStateWithLifecycle()
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
     var showDownloadChapterDialog by remember { mutableStateOf(false) }
     var selectedChapterIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
 
@@ -699,8 +411,8 @@ fun ComicDetailScreen(
         }
 
         // 收藏夹选择弹窗（仅内置 API 模式）
-        val showFolderPicker by comicDetailViewModel.showFolderPicker.collectAsState()
-        val folderList by comicDetailViewModel.folderList.collectAsState()
+        val showFolderPicker by comicDetailViewModel.showFolderPicker.collectAsStateWithLifecycle()
+        val folderList by comicDetailViewModel.folderList.collectAsStateWithLifecycle()
         if (showFolderPicker) {
             FolderPickerSheet(
                 comicId = comic.id,

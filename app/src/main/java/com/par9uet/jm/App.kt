@@ -15,10 +15,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,7 +32,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.compose.rememberNavController
-import com.par9uet.jm.core.common.InitManager
 import com.par9uet.jm.data.storage.LocalSettingManager
 import com.par9uet.jm.core.common.ToastManager
 import com.par9uet.jm.domain.store.UserManager
@@ -69,7 +68,6 @@ fun App(
     userViewModel: UserViewModel = koinActivityViewModel(),
     toastManager: ToastManager = getKoin().get(),
     localSettingManager: LocalSettingManager = getKoin().get(),
-    initManager: InitManager = getKoin().get(),
     userManager: UserManager = getKoin().get(),
     remoteSettingManager: com.par9uet.jm.domain.store.RemoteSettingManager = getKoin().get(),
     imageLoader: coil.ImageLoader = getKoin().get()
@@ -77,8 +75,8 @@ fun App(
     LaunchedEffect(Unit) {
         globalViewModel.init()
     }
-    val localSetting by localSettingManager.localSettingState.collectAsState()
-    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsState()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
+    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsStateWithLifecycle()
 
     // 锁定状态：初始为 true（启动即锁定），等待本地设置加载完成后根据 appLockEnabled 决定
     // 这样可以避免启动时主界面内容闪现后再显示锁屏
@@ -91,14 +89,12 @@ fun App(
     // 启动加载动画（初始化期间及引导完成后显示）
     var showLoadingScreen by remember { mutableStateOf(true) }
 
-    // 本地设置初始化加载完成后再决定启动时是否锁定
-    // 增加超时保护：最多等待 8 秒，避免网络初始化卡死导致永久黑屏
+    // 只等本地设置读出磁盘，不等整条初始化链。
+    // 初始化是串行的，远程设置最长会占 12 秒，而这里原先只等 8 秒就按
+    // 当时的 localSettingState 做决定——网络慢时拿到的是默认值，
+    // 后果是老用户重看引导，以及更严重的：应用锁被当成未开启而跳过。
     LaunchedEffect(Unit) {
-        runCatching {
-            kotlinx.coroutines.withTimeoutOrNull(8000L) {
-                initManager.deferred.await()
-            }
-        }
+        localSettingManager.loaded.first { it }
         settingsLoaded = true
         // 首次启动且未完成引导时显示欢迎页
         if (!localSettingManager.localSettingState.value.onboardingCompleted) {

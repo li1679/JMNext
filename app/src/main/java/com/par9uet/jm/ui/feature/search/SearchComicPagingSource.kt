@@ -59,8 +59,9 @@ class SearchComicPagingSource(
                 } else {
                     onFindSingleComicId(null)
                     val list = filterExcludedComics(data.data.toComicList(), excludedTags)
-                    val total = data.data.total.toInt()
-                    val isLastPage = currentPage >= (total + params.loadSize - 1) / params.loadSize
+                    // 用过滤前的原始条数判断是否末页：排除标签过滤后本页可能所剩无几，
+                    // 若据此判断会误以为到底；内置数据源的 total 也不是总条数
+                    val isLastPage = data.data.content.size < params.loadSize
                     LoadResult.Page(
                         data = list,
                         prevKey = if (currentPage == 1) null else currentPage - 1,
@@ -112,10 +113,14 @@ class SearchComicPagingSource(
         if (excludedTagSet.isEmpty()) return false
         detailBlockedCache[comicId]?.let { return it }
 
-        val isBlocked = when (val detail = comicRepository.getComicDetail(comicId)) {
-            is NetWorkResult.Success<ComicDetailResponse> -> detail.data.containsAnyExcludedTag(excludedTagSet)
-            is NetWorkResult.Error -> false
+        val detail = comicRepository.getComicDetail(comicId)
+        if (detail !is NetWorkResult.Success<ComicDetailResponse>) {
+            // 请求失败只影响本次判定，不写缓存：
+            // 一次网络抖动若被记成「不需要排除」，这本漫画在整个搜索会话里
+            // 都会绕过标签排除，而用户看不出原因
+            return false
         }
+        val isBlocked = detail.data.containsAnyExcludedTag(excludedTagSet)
         detailBlockedCache[comicId] = isBlocked
         return isBlocked
     }

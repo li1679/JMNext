@@ -14,9 +14,9 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -31,14 +31,22 @@ import org.koin.compose.viewmodel.koinActivityViewModel
 
 @Composable
 fun ComicChapterScreen(
+    comicId: Int = -1,
     currentChapterId: Int = -1,
     comicDetailViewModel: ComicDetailViewModel = koinActivityViewModel(),
     readHistoryManager: ReadHistoryManager = getKoin().get(),
 ) {
-    val comicDetailState by comicDetailViewModel.comicDetailState.collectAsState()
+    val comicDetailState by comicDetailViewModel.comicDetailState.collectAsStateWithLifecycle()
+    // 以路由 id 为准：详情 ViewModel 是 Activity 级共享的，
+    // 期间若打开过别的漫画，这里会显示错误的章节列表
+    LaunchedEffect(comicId) {
+        if (comicId > 0 && comicDetailState.data?.id != comicId) {
+            comicDetailViewModel.getComicDetail(comicId)
+        }
+    }
     val comic = comicDetailState.data
     val comicChapterList = comic?.comicChapterList ?: listOf()
-    val readHistory by readHistoryManager.readHistoryState.collectAsState()
+    val readHistory by readHistoryManager.readHistoryState.collectAsStateWithLifecycle()
     val readChapterIds = remember(comic, readHistory) {
         comic?.let {
             readHistoryManager.readChapterIds(

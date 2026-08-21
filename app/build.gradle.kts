@@ -103,7 +103,8 @@ composeCompiler {}
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
-    // 分层模块：界面层只依赖设计系统与服务层，不直接触碰网络/数据库实现
+    // 分层模块：界面层依赖设计系统与服务层；仓库/存储仅因 ViewModel 与
+    // 部分页面直接注入而暴露，新增代码应优先经由 :domain 访问
     implementation(project(":core:model"))
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))

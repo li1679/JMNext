@@ -30,6 +30,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -66,6 +68,18 @@ class UserViewModel(
     private val comicRepository: ComicRepository,
     private val downloadManager: DownloadManager,
 ) : ViewModel() {
+
+    /**
+     * 当前账号 id，0 表示未登录。
+     *
+     * 所有分页流都必须把它纳入 key：否则退出登录再换个账号进来，
+     * Paging 会继续沿用上一个账号的 generation，
+     * 列表里还是旧账号的收藏与历史，而对它们的操作却打到了新账号上。
+     */
+    private val currentUserId = userManager.userState
+        .map { it.data?.id ?: 0 }
+        .distinctUntilChanged()
+
     private val _loginState = MutableStateFlow(CommonUIState(data = null))
     val loginState = _loginState.asStateFlow()
     fun login(username: String, password: String) {
@@ -106,6 +120,16 @@ class UserViewModel(
     fun logout() {
         viewModelScope.launch {
             userManager.clearUser()
+            // 会话级状态必须一并清掉：留着的话，换账号进来会看到上一个账号的
+            // 筛选条件、收藏夹选择和标签统计，编辑态里甚至还选中着旧账号的条目
+            _collectComicFilter.value = CollectComicLocalFilter()
+            _selectedFolderId.value = 0
+            _folderList.value = emptyMap()
+            _collectTagCounts.value = emptyMap()
+            _collectAuthorCounts.value = emptyMap()
+            _collectEditState.value = CollectEditState()
+            _historyEditState.value = HistoryEditState()
+            collectMetaLoaded = false
         }
     }
 
@@ -129,8 +153,9 @@ class UserViewModel(
         _collectComicOrder,
         localSettingManager.localSettingState,
         _collectComicFilter,
-        _selectedFolderId
-    ) { order, localSetting, filter, folderId ->
+        _selectedFolderId,
+        currentUserId
+    ) { order, localSetting, filter, folderId, _ ->
         CollectPagerKey(order, localSetting.blockedTagList, filter, folderId)
     }.flatMapLatest { key ->
         Pager(
@@ -357,8 +382,9 @@ class UserViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     val historyComicPager = combine(
         localSettingManager.localSettingState,
-        _historyRefreshVersion
-    ) { localSetting, _ -> localSetting }
+        _historyRefreshVersion,
+        currentUserId
+    ) { localSetting, _, _ -> localSetting }
         .flatMapLatest { localSetting ->
         Pager(
             config = PagingConfig(pageSize = 20, prefetchDistance = 6, initialLoadSize = 20),
@@ -436,15 +462,15 @@ class UserViewModel(
         clearHistorySelection()
     }
 
-    val historyCommentPager = Pager(
-        config = PagingConfig(pageSize = 20, prefetchDistance = 6, initialLoadSize = 20),
-        pagingSourceFactory = {
-            HistoryCommentPagingSource(
-                userRepository,
-                userManager.userState.value.data?.id ?: 0
-            )
-        }
-    ).flow.cachedIn(viewModelScope)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val historyCommentPager = currentUserId.flatMapLatest { userId ->
+        Pager(
+            config = PagingConfig(pageSize = 20, prefetchDistance = 6, initialLoadSize = 20),
+            pagingSourceFactory = {
+                HistoryCommentPagingSource(userRepository, userId)
+            }
+        ).flow
+    }.cachedIn(viewModelScope)
 
     private val _signInDataState = MutableStateFlow(
         CommonUIState<SignInData>(

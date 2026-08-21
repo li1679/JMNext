@@ -14,8 +14,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +48,7 @@ fun ComicCoverImage(
     imageLoader: ImageLoader = koin.get(),
     toastManager: ToastManager = koin.get(),
 ) {
-    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsState()
+    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsStateWithLifecycle()
     val clipboardManager = LocalClipboardManager.current
 
     Box(modifier = modifier) {

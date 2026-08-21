@@ -250,6 +250,14 @@ class ComicRepositoryImpl(
         if (useEmbeddedApi()) {
             return withContext(Dispatchers.IO) {
                 try {
+                    // 内置客户端的周刊接口只接受 categoryId，不支持分页，也没有 typeId 维度，
+                    // 一次就返回该分类的全部条目。第二页起必须返回空，
+                    // 否则 Paging 会反复拿到同一批数据，列表里出现重复条目。
+                    if (page > 1) {
+                        return@withContext NetWorkResult.Success(
+                            WeekRecommendComicResponse(total = 0, list = emptyList())
+                        )
+                    }
                     NetWorkResult.Success(withEmbeddedClient { client ->
                         val detail = client.getWeeklyPicksDetail(categoryId)
                         WeekRecommendComicResponse(

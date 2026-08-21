@@ -33,6 +33,7 @@ import com.par9uet.jm.core.common.WEBP_QUALITY_DOWNLOAD
 import com.par9uet.jm.domain.notification.cancelProgressNotification
 import com.par9uet.jm.core.common.compressWebpCompat
 import com.par9uet.jm.domain.notification.showProgressNotification
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -107,6 +108,12 @@ class DownloadComicWorker(
             cancelComicCacheNotificationIfIdle(downloadTask)
             downloadToastAggregator.report(batchId, batchTotal, comicId, success = true)
             Result.success()
+        } catch (e: CancellationException) {
+            // 用户暂停或删除时 WorkManager 会取消协程。这里必须原样抛出：
+            // 当成普通异常处理会走进重试分支，任务被取消后又排回来继续下载；
+            // 也不能把状态改成 error，暂停的任务应保持 paused 等待继续。
+            DownloadSpeedTracker.stopTracking(coverOwnerId)
+            throw e
         } catch (e: Exception) {
             if (runAttemptCount < DOWNLOAD_MAX_ATTEMPTS - 1) {
                 Result.retry()

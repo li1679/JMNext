@@ -43,10 +43,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -91,12 +91,12 @@ fun ComicReadScreen(
     val isShowToolbar by comicReadViewModel.isShowToolBar
     val size = comicReadViewModel.size
     var currentIndexState by comicReadViewModel.currentIndexState
-    val localSetting by localSettingManager.localSettingState.collectAsState()
-    val isLogin by userManager.isLoginState.collectAsState(false)
-    val comicPicState by comicReadViewModel.comicPicState.collectAsState()
-    val comicDetailState by comicReadViewModel.comicDetailState.collectAsState()
-    val localChapterList by comicReadViewModel.localChapterList.collectAsState()
-    val readHistory by readHistoryManager.readHistoryState.collectAsState()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val comicPicState by comicReadViewModel.comicPicState.collectAsStateWithLifecycle()
+    val comicDetailState by comicReadViewModel.comicDetailState.collectAsStateWithLifecycle()
+    val localChapterList by comicReadViewModel.localChapterList.collectAsStateWithLifecycle()
+    val readHistory by readHistoryManager.readHistoryState.collectAsStateWithLifecycle()
     val comic = comicDetailState.data
     val loading = comicPicState.isLoading
     val initialReaderIndex = if (size > 0) currentIndexState.coerceIn(0, size - 1) else 0

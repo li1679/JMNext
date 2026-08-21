@@ -21,9 +21,13 @@ class HistoryComicPagingSource(
             }
 
             is NetWorkResult.Success<UserHistoryComicListResponse> -> {
+                // 用「本页是否装满」判断结束，不要用 total 推总页数：
+                // 内置数据源拿不到总条目数，返回的是当前页条数，
+                // 据此算出的总页数恒为 1，历史记录会只加载第一页。
+                // 判断必须用过滤前的原始条数，否则屏蔽标签一多就会被误判成末页。
+                val rawSize = data.data.list.size
                 val list = data.data.toComicList().filterBlockedTags(blockedTagList)
-                val total = data.data.total
-                val isLastPage = currentPage >= (total + params.loadSize - 1) / params.loadSize
+                val isLastPage = rawSize < params.loadSize
                 LoadResult.Page(
                     data = list,
                     prevKey = if (currentPage == 1) null else currentPage - 1,

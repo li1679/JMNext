@@ -34,8 +34,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicLightColorScheme
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,7 +89,7 @@ private enum class ColorSlot(val label: String) {
 fun ColorPaletteScreen(
     localSettingManager: LocalSettingManager = getKoin().get(),
 ) {
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var editingSlot by remember { mutableStateOf<ColorSlot?>(null) }

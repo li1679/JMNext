@@ -35,10 +35,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -92,8 +92,8 @@ fun DownloadComicDetailScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val mainNavController = LocalMainNavController.current
-    val detailState by viewModel.detailState.collectAsState()
-    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsState()
+    val detailState by viewModel.detailState.collectAsStateWithLifecycle()
+    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
     var cachedInfo by remember { mutableStateOf<CachedComicInfo?>(null) }
     var exporting by remember { mutableStateOf(false) }

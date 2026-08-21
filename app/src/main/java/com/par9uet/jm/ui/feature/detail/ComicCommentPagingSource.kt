@@ -21,8 +21,8 @@ class ComicCommentPagingSource(
 
             is NetWorkResult.Success<CommentListResponse> -> {
                 val list = data.data.toCommentList()
-                val total = data.data.total.toInt()
-                val isLastPage = currentPage >= (total + params.loadSize - 1) / params.loadSize
+                // 以本页是否装满判断结束：内置数据源的 total 是当前页条数而非总数
+                val isLastPage = data.data.list.size < params.loadSize
                 LoadResult.Page(
                     data = list,
                     prevKey = if (currentPage == 1) null else currentPage - 1,

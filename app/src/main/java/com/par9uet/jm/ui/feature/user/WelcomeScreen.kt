@@ -50,9 +50,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,9 +80,9 @@ fun WelcomeScreen(
     userManager: UserManager = getKoin().get(),
     userViewModel: UserViewModel = koinActivityViewModel(),
 ) {
-    val localSetting by localSettingManager.localSettingState.collectAsState()
-    val isLogin by userManager.isLoginState.collectAsState(false)
-    val loginState by userViewModel.loginState.collectAsState()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val loginState by userViewModel.loginState.collectAsStateWithLifecycle()
 
     var step by remember { mutableStateOf(0) }
     var preferenceStepHandled by remember { mutableStateOf(false) }

@@ -18,10 +18,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 
 enum class AppUpdateDownloadStatus {
@@ -57,7 +59,20 @@ class AppUpdateDownloadManager(
     private val client = OkHttpClient()
     private var job: Job? = null
     private var paused = false
-    private var canceled = false
+
+    /**
+     * 下载代次。
+     *
+     * start 与 cancel 都会让它自增，正在跑的旧任务据此判断自己是否已被取代。
+     * 没有它时，start 先把 canceled 置 true 又立刻重置为 false，
+     * 旧任务随后进入失败回调，会把刚开始的新任务状态改写成 Error。
+     */
+    private val generation = AtomicInteger(0)
+
+    /** 正在飞行的请求。阻塞在 socket 读取时只有 cancel() 能把它叫醒 */
+    @Volatile
+    private var activeCall: Call? = null
+
     private var activeRequest: AppUpdateDownloadRequest? = null
 
     private val _state = MutableStateFlow(AppUpdateDownloadState())
@@ -71,7 +86,7 @@ class AppUpdateDownloadManager(
         cancelInternal(resetState = false)
         activeRequest = request
         paused = false
-        canceled = false
+        val myGeneration = generation.incrementAndGet()
         _state.value = AppUpdateDownloadState(
             status = AppUpdateDownloadStatus.Downloading,
             version = request.version,
@@ -79,7 +94,7 @@ class AppUpdateDownloadManager(
             downloadUrl = request.downloadUrl
         )
         job = scope.launch {
-            download(request)
+            download(request, myGeneration)
         }
     }
 
@@ -116,8 +131,12 @@ class AppUpdateDownloadManager(
     }
 
     private fun cancelInternal(resetState: Boolean) {
-        canceled = true
+        // 自增代次让在跑的任务立即失效，它随后写状态时会被 isCurrent 挡掉
+        generation.incrementAndGet()
         paused = false
+        // job.cancel() 对阻塞在 input.read() 的线程不起作用，必须同时断开连接
+        activeCall?.cancel()
+        activeCall = null
         job?.cancel()
         job = null
         if (resetState) {
@@ -125,13 +144,18 @@ class AppUpdateDownloadManager(
         }
     }
 
-    private suspend fun download(request: AppUpdateDownloadRequest) = withContext(Dispatchers.IO) {
+    private suspend fun download(
+        request: AppUpdateDownloadRequest,
+        myGeneration: Int
+    ) = withContext(Dispatchers.IO) {
+        fun isCurrent() = generation.get() == myGeneration
         runCatching {
             val httpRequest = Request.Builder()
                 .url(request.downloadUrl)
                 .header("User-Agent", "jmcomic-next-android")
                 .build()
-            client.newCall(httpRequest).execute().use { response ->
+            val call = client.newCall(httpRequest).also { activeCall = it }
+            call.execute().use { response ->
                 if (!response.isSuccessful) {
                     error("下载失败：HTTP ${response.code}")
                 }
@@ -146,10 +170,10 @@ class AppUpdateDownloadManager(
                     FileOutputStream(file).use { output ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                         while (true) {
-                            while (paused && !canceled) {
+                            while (paused && isCurrent()) {
                                 delay(250)
                             }
-                            if (canceled) {
+                            if (!isCurrent()) {
                                 file.delete()
                                 return@withContext
                             }
@@ -161,15 +185,17 @@ class AppUpdateDownloadManager(
                             val now = System.currentTimeMillis()
                             if (now - lastTick >= 500L) {
                                 val speed = (windowBytes * 1000f / (now - lastTick)).roundToInt().toLong()
-                                _state.update {
-                                    it.copy(
-                                        downloadedBytes = downloaded,
-                                        totalBytes = totalBytes,
-                                        speedBytesPerSecond = speed,
-                                        status = AppUpdateDownloadStatus.Downloading
-                                    )
+                                if (isCurrent()) {
+                                    _state.update {
+                                        it.copy(
+                                            downloadedBytes = downloaded,
+                                            totalBytes = totalBytes,
+                                            speedBytesPerSecond = speed,
+                                            status = AppUpdateDownloadStatus.Downloading
+                                        )
+                                    }
+                                    notifyProgress()
                                 }
-                                notifyProgress()
                                 windowBytes = 0L
                                 lastTick = now
                             }
@@ -193,7 +219,9 @@ class AppUpdateDownloadManager(
                 )
             }
         }.onFailure { throwable ->
-            if (!canceled) {
+            // 已被取代或取消的任务不得改写状态，否则旧任务的失败会把
+            // 刚启动的新任务显示成「下载失败」
+            if (isCurrent()) {
                 _state.update {
                     it.copy(
                         status = AppUpdateDownloadStatus.Error,
@@ -204,6 +232,7 @@ class AppUpdateDownloadManager(
                 cancelProgressNotification(context, APP_UPDATE_NOTIFICATION_ID)
             }
         }
+        if (isCurrent()) activeCall = null
     }
 
     private fun notifyProgress() {

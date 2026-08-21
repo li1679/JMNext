@@ -62,8 +62,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -124,7 +124,7 @@ fun LocalSettingScreen(
     localSettingManager: LocalSettingManager = getKoin().get()
 ) {
     val mainNavController = LocalMainNavController.current
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     var settingType by remember { mutableStateOf<SettingType>(SettingType.Api) }
     var isOpenSettingSelectDialog by remember { mutableStateOf(false) }
     var showHomeExcludedTagsDialog by remember { mutableStateOf(false) }

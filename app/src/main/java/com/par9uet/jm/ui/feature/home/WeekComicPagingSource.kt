@@ -38,8 +38,8 @@ class WeekComicPagingSource(
 
             is NetWorkResult.Success<WeekRecommendComicResponse> -> {
                 val list = data.data.toComicList().filterBlockedTags(blockedTagList)
-                val total = data.data.total
-                val isLastPage = currentPage >= (total + params.loadSize - 1) / params.loadSize
+                // 用过滤前的原始条数判断，避免屏蔽标签把本页清空后被误判成末页
+                val isLastPage = data.data.list.size < params.loadSize
                 LoadResult.Page(
                     data = list,
                     prevKey = if (currentPage == 1) null else currentPage - 1,

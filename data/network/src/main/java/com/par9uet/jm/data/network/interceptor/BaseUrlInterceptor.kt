@@ -27,6 +27,14 @@ class BaseUrlInterceptor(
     @Volatile
     private var preferredBaseUrl: String? = null
 
+    /**
+     * 记录 preferredBaseUrl 是基于哪条用户设置得出的。
+     * 用户在设置里换线路后必须让新选择立即生效，否则只要旧线路还连得通，
+     * 它会因为排在候选列表首位而一直被优先使用，换线路等于没换。
+     */
+    @Volatile
+    private var preferredForApi: String? = null
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
         val candidates = buildCandidates()
@@ -47,6 +55,7 @@ class BaseUrlInterceptor(
                 val response = chain.proceed(request)
                 if (!allowFailover || !shouldFailover(response.code)) {
                     preferredBaseUrl = baseUrl
+                    preferredForApi = localSettingManager.localSettingState.value.api
                     return response
                 }
                 // 该线路明确不可用，关闭响应后换下一条
@@ -66,7 +75,9 @@ class BaseUrlInterceptor(
     /** 候选线路：上次成功的 > 当前选中的 > 设置里其余的 */
     private fun buildCandidates(): List<String> {
         val setting = localSettingManager.localSettingState.value
-        return listOfNotNull(preferredBaseUrl, setting.api)
+        // 用户改过线路后，上次成功的那条不再享有优先权，否则新选择永远轮不上
+        val preferred = preferredBaseUrl?.takeIf { preferredForApi == setting.api }
+        return listOfNotNull(preferred, setting.api)
             .plus(setting.apiList)
             .map { it.trim().removeSuffix("/") }
             .filter { it.isNotEmpty() }

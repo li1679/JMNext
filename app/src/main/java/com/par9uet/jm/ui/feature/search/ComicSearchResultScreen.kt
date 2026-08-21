@@ -23,9 +23,9 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,10 +74,10 @@ fun ComicSearchResultScreen(
     localSettingManager: LocalSettingManager = getKoin().get(),
 ) {
     val mainNavController = LocalMainNavController.current
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     val comicSearchLazyPagingItems = comicViewModel.searchComicPager.collectAsLazyPagingItems()
-    val comicSearchFilterState by comicViewModel.searchComicFilterState.collectAsState()
-    val searchComicIdState by comicViewModel.searchComicIdState.collectAsState()
+    val comicSearchFilterState by comicViewModel.searchComicFilterState.collectAsStateWithLifecycle()
+    val searchComicIdState by comicViewModel.searchComicIdState.collectAsStateWithLifecycle()
 
     fun editRoute(): String {
         val encodedSearchContent = Uri.encode(comicSearchFilterState.searchContent)

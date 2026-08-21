@@ -29,10 +29,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import com.par9uet.jm.data.database.dao.DownloadComicDao
+import com.par9uet.jm.domain.store.DownloadManager
+import org.koin.compose.getKoin
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,7 +64,10 @@ private data class CacheItem(
 )
 
 @Composable
-fun CacheCleanupScreen() {
+fun CacheCleanupScreen(
+    downloadManager: DownloadManager = getKoin().get(),
+    downloadComicDao: DownloadComicDao = getKoin().get(),
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
@@ -71,8 +78,12 @@ fun CacheCleanupScreen() {
     val checkedMap = remember { mutableStateMapOf<String, Boolean>() }
 
     var cacheItems by remember { mutableStateOf<List<CacheItem>>(emptyList()) }
+    // 清理完成后自增触发重新扫描。原先直接把 loading 置回 true，
+    // 而扫描挂在 LaunchedEffect(Unit) 上不会再执行，页面就永久停在转圈。
+    var scanKey by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(scanKey) {
+        loading = true
         withContext(Dispatchers.IO) {
             val items = mutableListOf<CacheItem>()
 
@@ -167,6 +178,18 @@ fun CacheCleanupScreen() {
                         cleaning = true
                         scope.launch {
                             var freedBytes = 0L
+                            // 删除已下载漫画的目录等于让离线内容失效，
+                            // 必须同时停掉在跑的 Worker 并清掉下载记录，
+                            // 否则列表仍显示「已完成」，点开却没有图片
+                            val clearingDownloads = selectedItems.any { it.id == "download" }
+                            if (clearingDownloads) {
+                                val all = withContext(Dispatchers.IO) { downloadComicDao.getAll() }
+                                val ids = all.map { it.id }
+                                downloadManager.cancelDownloads(ids)
+                                withContext(Dispatchers.IO) {
+                                    downloadComicDao.deleteByIds(ids)
+                                }
+                            }
                             withContext(Dispatchers.IO) {
                                 selectedItems.forEach { item ->
                                     item.dir?.let { dir ->
@@ -178,7 +201,7 @@ fun CacheCleanupScreen() {
                             }
                             cleaning = false
                             cleanResult = "已清理 ${formatBytes(freedBytes)}"
-                            loading = true
+                            scanKey++
                         }
                     }
                 ) { Text("清理", color = MaterialTheme.colorScheme.error) }

@@ -228,14 +228,22 @@ class LocalSettingManager(
 
     private var appTaskInfo = AppTaskInfo(
         taskName = "load local app settings",
-        sort = 3,
+        // 必须排在所有网络任务之前：初始化是串行的，而界面要靠本地设置来决定
+        // 是否上锁、是否显示引导。让它等在远程请求后面，一旦网络慢，
+        // 界面就会拿着默认值做决定——应用锁会被当成「未开启」而跳过。
+        sort = 0,
     )
+
+    /** 本地设置是否已从磁盘读出。界面据此判断能否安全地使用 [localSettingState]。 */
+    private val _loaded = MutableStateFlow(false)
+    val loaded = _loaded.asStateFlow()
 
     override suspend fun init() {
         log("local app settings init start")
         _localSettingState.update {
             localSettingStorage.get()
         }
+        _loaded.value = true
         launcherDisguiseApplier.apply(LauncherDisguise.fromId(_localSettingState.value.launcherDisguise))
         log("local app settings init finished")
     }

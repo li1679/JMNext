@@ -28,8 +28,8 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,7 +59,7 @@ private val unlockModeTextMap = mapOf(
 fun AppLockSettingScreen(
     localSettingManager: LocalSettingManager = getKoin().get()
 ) {
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
 
     // 密码/图案是否已设置
     val hasPassword by remember(localSetting) {

@@ -33,6 +33,8 @@ import io.github.jukomu.jmcomic.core.net.OkHttpBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.Cookie
 import java.time.Duration
@@ -44,6 +46,43 @@ class UserRepositoryImpl(
     private val cookieStorage: CookieStorage,
     private val embeddedClientManager: EmbeddedClientManager,
 ) : BaseRepository(initManager), UserRepository {
+
+    private companion object {
+        /** 补全 tags 的并发上限，避免一页几十项同时打满连接池 */
+        const val TAG_FETCH_CONCURRENCY = 4
+
+        /** tags 缓存容量。收藏页翻页与标签统计会反复碰到同一批漫画 */
+        const val TAG_CACHE_MAX_ENTRIES = 512
+    }
+
+    /** album id -> 完整 tags。按访问顺序淘汰，只缓存成功结果 */
+    private val tagCache = object : LinkedHashMap<String, List<String>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<String>>) =
+            size > TAG_CACHE_MAX_ENTRIES
+    }
+
+    private val tagFetchSemaphore = Semaphore(TAG_FETCH_CONCURRENCY)
+
+    /**
+     * 取某本漫画的完整 tags，失败时回退到列表自带的 tags。
+     *
+     * 失败结果不入缓存：一次网络抖动导致的空 tags 若被记住，
+     * 这本漫画在后续的标签排除里会一直被当成「不含任何标签」而漏过滤。
+     */
+    private suspend fun fetchFullTags(
+        client: JmApiClient,
+        albumId: String,
+        fallback: List<String>,
+    ): List<String> {
+        if (albumId.isEmpty()) return fallback
+        synchronized(tagCache) { tagCache[albumId] }?.let { return it }
+        return tagFetchSemaphore.withPermit {
+            synchronized(tagCache) { tagCache[albumId] }?.let { return@withPermit it }
+            runCatching { client.getAlbum(albumId).tags().orEmpty() }
+                .onSuccess { tags -> synchronized(tagCache) { tagCache[albumId] = tags } }
+                .getOrDefault(fallback)
+        }
+    }
 
     override suspend fun login(username: String, password: String): NetWorkResult<LoginResponse> {
         if (useEmbeddedApi()) {
@@ -72,20 +111,23 @@ class UserRepositoryImpl(
             return withContext(Dispatchers.IO) {
                 try {
                     val client = embeddedClientManager.getClient()
+                    // 内置客户端的 FavoriteQuery 只接受 folderId 与 page，
+                    // 不提供排序维度，order 在这条链路上无法生效（上游库限制）。
                     val query = FavoriteQuery.Builder()
                         .folderId(folderId)
                         .page(page)
                         .build()
                     val favPage = client.getFavorites(query)
                     val metas = favPage.content().orEmpty()
-                    // 为每个收藏项获取完整 Album 以补全所有 tags（并发请求）
+                    // 列表接口给的 tags 不全，需要逐项取详情补齐。
+                    // 这里必须限流并缓存：标签统计会连翻上百页，
+                    // 不加约束时一次统计能打出上千个详情请求。
                     val listWithFullTags = coroutineScope {
                         metas.map { meta ->
                             async {
-                                val fullTags = runCatching {
-                                    client.getAlbum(meta.id().orEmpty()).tags().orEmpty()
-                                }.getOrDefault(meta.tags().orEmpty())
-                                meta.toListItem(fullTags)
+                                val id = meta.id().orEmpty()
+                                val fallback = meta.tags().orEmpty()
+                                meta.toListItem(fetchFullTags(client, id, fallback))
                             }
                         }.map { it.await() }
                     }

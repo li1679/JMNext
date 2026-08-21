@@ -7,6 +7,7 @@ import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.par9uet.jm.core.model.Comic
@@ -21,6 +22,9 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 private const val DOWNLOAD_RETRY_BACKOFF_SECONDS = 30L
+
+/** 每话一个唯一任务名，供入队与取消共同定位 */
+private fun workName(comicId: Int) = "download-comic-$comicId"
 
 class DownloadManager(
     private val context: Context,
@@ -152,8 +156,26 @@ class DownloadManager(
                     TimeUnit.SECONDS
                 )
                 .build()
-            workManager.enqueue(downloadRequest)
+            // 按 comicId 建唯一任务：用裸 enqueue 时，重复点「继续」或重试会为同一话
+            // 排出多个 Worker，它们并行写同一目录。REPLACE 保证同一话永远只有一个在跑。
+            workManager.enqueueUniqueWork(
+                workName(comicId),
+                ExistingWorkPolicy.REPLACE,
+                downloadRequest
+            )
         }
+    }
+
+    /**
+     * 取消这些话正在进行的下载任务。
+     *
+     * 暂停与删除都必须先走这里：只改数据库状态或删记录并不会让 Worker 停下，
+     * 它会继续下载、继续写文件，最后把状态改回 complete。
+     */
+    fun cancelDownloads(comicIds: List<Int>) {
+        if (comicIds.isEmpty()) return
+        val workManager = WorkManager.getInstance(context)
+        comicIds.distinct().forEach { workManager.cancelUniqueWork(workName(it)) }
     }
 
     fun retryDownload(comicId: Int) {

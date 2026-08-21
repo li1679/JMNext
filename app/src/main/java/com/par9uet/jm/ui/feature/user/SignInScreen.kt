@@ -34,9 +34,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -103,14 +103,14 @@ fun SignInScreen(
     userManager: UserManager = getKoin().get()
 ) {
     val mainNavController = LocalMainNavController.current
-    val isLogin by userManager.isLoginState.collectAsState(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
     val today = remember { LocalDate.now() }
     val daysOfWeek = remember { daysOfWeek() }
     val currentMonth = remember(today) { today.yearMonth }
     val startMonth = remember { currentMonth.minusMonths(500) }
     val endMonth = remember { currentMonth.plusMonths(500) }
-    val signDataState by userViewModel.signDataState.collectAsState()
-    val signInState by userViewModel.signInState.collectAsState()
+    val signDataState by userViewModel.signDataState.collectAsStateWithLifecycle()
+    val signInState by userViewModel.signInState.collectAsStateWithLifecycle()
     val signMaxDay by remember {
         derivedStateOf {
             signDataState.data?.dateMap?.entries?.fold(mutableListOf(0, 0)) { acc, item ->

@@ -37,9 +37,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -70,8 +70,8 @@ fun LoginScreen(
     val mainNavController = LocalMainNavController.current
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
-    val isLogin by userManager.isLoginState.collectAsState(false)
-    val loginState by userViewModel.loginState.collectAsState()
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val loginState by userViewModel.loginState.collectAsStateWithLifecycle()
 
     // 返回：若无可返回的页面则退回主页 tab
     fun goBack() {

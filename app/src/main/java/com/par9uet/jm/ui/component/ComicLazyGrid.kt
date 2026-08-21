@@ -19,9 +19,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshState
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -52,7 +52,7 @@ fun ComicLazyGrid(
     stickyHeaderContent: @Composable (() -> Unit)? = null,
     localSettingManager: LocalSettingManager = getKoin().get(),
 ) {
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     val visibleList = remember(list, localSetting.blockedTagList) {
         list.filterBlockedTags(localSetting.blockedTagList)
     }

@@ -1,5 +1,6 @@
 package com.par9uet.jm.ui.component
 
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -22,7 +23,7 @@ private fun ComicTag(label: String, family: ColorFamily) {
             labelColor = family.onColorContainer,
         ),
         onClick = {
-            mainNavController.navigate("comicSearchResult/$label")
+            mainNavController.navigate("comicSearchResult/${Uri.encode(label)}")
         },
         label = { Text(text = label) }
     )

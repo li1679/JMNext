@@ -41,9 +41,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -241,14 +241,14 @@ fun ComicCommentArea(
 ) {
     val focusManager = LocalFocusManager.current
     val mainNavController = LocalMainNavController.current
-    val isLogin by userManager.isLoginState.collectAsState(false)
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
     val commentInputFocusRequester = remember { FocusRequester() }
     val commentLazyPagingItems = comicDetailViewModel.commentPager.collectAsLazyPagingItems()
-    val likedCommentIds by comicDetailViewModel.likedCommentIds.collectAsState()
+    val likedCommentIds by comicDetailViewModel.likedCommentIds.collectAsStateWithLifecycle()
     var replyComment by remember(comicId) { mutableStateOf<Comment?>(null) }
 
     // 评论页独立使用时拉取漫画详情，用于在标题栏显示漫画标题与 JM 编码
-    val comicDetailState by comicDetailViewModel.comicDetailState.collectAsState()
+    val comicDetailState by comicDetailViewModel.comicDetailState.collectAsStateWithLifecycle()
     LaunchedEffect(comicId) {
         comicDetailViewModel.changeCommentComicId(comicId)
         // 仅当当前详情不是该漫画时才拉取
@@ -445,7 +445,7 @@ private fun CommentInputBar(
             color = MaterialTheme.colorScheme.surfaceContainer
         ) {
             val textFieldState = rememberTextFieldState()
-            val commentComicState by comicDetailViewModel.commentComicState.collectAsState()
+            val commentComicState by comicDetailViewModel.commentComicState.collectAsStateWithLifecycle()
             fun comment() {
                 val content = textFieldState.text.toString().trim()
                 if (content.isBlank()) return

@@ -35,9 +35,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,11 +64,11 @@ fun DownloadScreen(
     localSettingManager: LocalSettingManager = getKoin().get()
 ) {
     val mainNavController = LocalMainNavController.current
-    val completeGroups by downloadViewModel.completeGroups.collectAsState()
-    val activeGroups by downloadViewModel.activeGroups.collectAsState()
-    val errorGroups by downloadViewModel.errorGroups.collectAsState()
-    val editState by downloadViewModel.editState.collectAsState()
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val completeGroups by downloadViewModel.completeGroups.collectAsStateWithLifecycle()
+    val activeGroups by downloadViewModel.activeGroups.collectAsStateWithLifecycle()
+    val errorGroups by downloadViewModel.errorGroups.collectAsStateWithLifecycle()
+    val editState by downloadViewModel.editState.collectAsStateWithLifecycle()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     var completeExpanded by rememberSaveable { mutableStateOf(true) }
     var activeExpanded by rememberSaveable { mutableStateOf(true) }
     var errorExpanded by rememberSaveable { mutableStateOf(true) }

@@ -33,8 +33,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,7 +55,7 @@ import org.koin.compose.getKoin
 fun BlockedTagsScreen(
     localSettingManager: LocalSettingManager = getKoin().get(),
 ) {
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     val templates = localSetting.blockedTagTemplateList
     var editingIndex by remember { mutableStateOf<Int?>(null) }
     var templateName by remember { mutableStateOf("") }

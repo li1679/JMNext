@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -36,8 +38,8 @@ fun TabScreen(
     val mainNavController = LocalMainNavController.current
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    val isLogin by userManager.isLoginState.collectAsState(false)
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     CompositionLocalProvider(
         LocalTabNavController provides tabNavController,
     ) {
@@ -64,7 +66,13 @@ fun TabScreen(
                     NavHost(
                         modifier = Modifier.weight(1f),
                         navController = tabNavController,
-                        startDestination = tabName
+                        startDestination = tabName,
+                        // 与主 NavHost 一致：默认转场会让退出页面多停留 700ms
+                        // 并继续参与命中测试，快速切 Tab 时会点到旧页面上的控件
+                        enterTransition = { EnterTransition.None },
+                        exitTransition = { ExitTransition.None },
+                        popEnterTransition = { EnterTransition.None },
+                        popExitTransition = { ExitTransition.None }
                     ) {
                         composable("home") {
                             HomeScreen()

@@ -8,9 +8,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,7 +44,7 @@ fun ComicPageRead(
     onUpdateSliderValue: (value: Float) -> Unit
 ) {
     var currentIndexState by comicReadViewModel.currentIndexState
-    val comicPicState by comicReadViewModel.comicPicState.collectAsState()
+    val comicPicState by comicReadViewModel.comicPicState.collectAsStateWithLifecycle()
     val list = comicPicState.data ?: listOf()
     val context = LocalContext.current
     var isProgrammaticScroll by remember { mutableStateOf(false) }

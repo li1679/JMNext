@@ -40,8 +40,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -323,9 +323,9 @@ fun UserScreen(
     userViewModel: UserViewModel = koinActivityViewModel()
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val userState by userManager.userState.collectAsState()
-    val isLogin by userManager.isLoginState.collectAsState(false)
-    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsState()
+    val userState by userManager.userState.collectAsStateWithLifecycle()
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsStateWithLifecycle()
     val mainNavController = LocalMainNavController.current
 
     fun checkLoginThenDo(onDo: () -> Unit) {

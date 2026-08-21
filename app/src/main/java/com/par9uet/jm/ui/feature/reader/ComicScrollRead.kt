@@ -11,9 +11,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,8 +52,8 @@ fun ComicScrollRead(
 ) {
     val coroutineScope = rememberCoroutineScope()
     var currentIndexState by comicReadViewModel.currentIndexState
-    val comicPicState by comicReadViewModel.comicPicState.collectAsState()
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val comicPicState by comicReadViewModel.comicPicState.collectAsStateWithLifecycle()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     val list = comicPicState.data ?: listOf()
     val context = LocalContext.current
     var programmaticScroll by remember { mutableStateOf(false) }

@@ -40,9 +40,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -140,9 +140,9 @@ fun HomeScreen(
     localSettingManager: LocalSettingManager = getKoin().get()
 ) {
     val mainNavController = LocalMainNavController.current
-    val homeComicState by comicViewModel.homeComicState.collectAsState()
-    val isLogin by userManager.isLoginState.collectAsState(false)
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val homeComicState by comicViewModel.homeComicState.collectAsStateWithLifecycle()
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle(false)
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     val onSearch = {
         // 搜索 ViewModel 是 Activity 级别的，首页入口代表新的搜索会话。
         comicViewModel.clearSearchState()

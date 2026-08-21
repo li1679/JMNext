@@ -22,9 +22,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -79,8 +79,8 @@ fun UserHistoryComicScreen(
     localSettingManager: LocalSettingManager = getKoin().get(),
 ) {
     val historyComicLazyPagingItems = userViewModel.historyComicPager.collectAsLazyPagingItems()
-    val historyEditState by userViewModel.historyEditState.collectAsState()
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val historyEditState by userViewModel.historyEditState.collectAsStateWithLifecycle()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
     BackHandler(enabled = historyEditState.editing) {

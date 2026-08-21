@@ -13,8 +13,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,7 +36,7 @@ fun Comment(
     onClick: (() -> Unit)? = null,
     action: (@Composable () -> Unit)? = null
 ) {
-    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsState()
+    val remoteSetting by remoteSettingManager.remoteSettingState.collectAsStateWithLifecycle()
     val avatarModel = if (comment.avatar.startsWith("http://", ignoreCase = true) ||
         comment.avatar.startsWith("https://", ignoreCase = true)
     ) {

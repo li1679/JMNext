@@ -34,9 +34,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,7 +73,7 @@ fun ComicSearchScreen(
 ) {
     val mainNavController = LocalMainNavController.current
     val focusRequester = remember { FocusRequester() }
-    val searchComicFilterState by comicViewModel.searchComicFilterState.collectAsState()
+    val searchComicFilterState by comicViewModel.searchComicFilterState.collectAsStateWithLifecycle()
     // 带参数的路由是「从结果页返回编辑」或其它页面带条件跳转，路由参数优先。
     // 无参数路由则使用 ViewModel 中本次搜索会话的状态；首页入口会在导航前清空它。
     val hasRouteSearch = initialSearchContent.isNotBlank() || initialExcludedTags.isNotEmpty()
@@ -98,8 +98,8 @@ fun ComicSearchScreen(
             )
         )
     }
-    val historySearchState by historySearchManager.historySearchState.collectAsState()
-    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val historySearchState by historySearchManager.historySearchState.collectAsStateWithLifecycle()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
     fun addExcludedTag(tag: String) {

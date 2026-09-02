@@ -10,7 +10,6 @@ import com.par9uet.jm.core.model.ComicSearchOrderFilter
 import com.par9uet.jm.data.repository.ComicRepository
 import com.par9uet.jm.data.network.model.CollectComicResponse
 import com.par9uet.jm.data.network.model.ComicDetailResponse
-import com.par9uet.jm.data.network.model.ComicDetailRelatedListItemResponse
 import com.par9uet.jm.data.network.model.ComicListResponse
 import com.par9uet.jm.data.network.model.ComicPicListResponse
 import com.par9uet.jm.data.network.model.CommentComicResponse
@@ -20,13 +19,13 @@ import com.par9uet.jm.data.network.model.LikeComicResponse
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.network.model.WeekRecommendComicResponse
 import com.par9uet.jm.data.network.model.WeekResponse
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SearchComicPagingSourceTest {
     @Test
-    fun filtersMultipleExcludedTagsByDetail() = runBlocking {
+    fun filtersMultipleExcludedTagsByDetail() = runTest {
         val repository = FakeComicRepository()
         val source = SearchComicPagingSource(
             comicRepository = repository,
@@ -88,7 +87,7 @@ class SearchComicPagingSourceTest {
 
         override suspend fun getHomeSwiperComicList(): NetWorkResult<List<HomeSwiperComicListItemResponse>> = unused()
 
-        override suspend fun getComicPicList(id: Int, shunt: String): NetWorkResult<ComicPicListResponse> = unused()
+        override suspend fun getComicPicList(id: Int): NetWorkResult<ComicPicListResponse> = unused()
 
         override suspend fun downloadImageBytes(comicId: Int, imageIndex: Int): ByteArray? = unused()
 
@@ -149,7 +148,6 @@ class SearchComicPagingSourceTest {
                 works = emptyList(),
                 is_favorite = false,
                 liked = false,
-                related_list = emptyList<ComicDetailRelatedListItemResponse>(),
                 series = emptyList(),
                 series_id = "",
                 price = "0",

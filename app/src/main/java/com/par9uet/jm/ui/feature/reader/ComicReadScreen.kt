@@ -187,7 +187,6 @@ fun ComicReadScreen(
             comicReadViewModel.getComicDetail(comicId)
             comicReadViewModel.getComicPicList(
                 comicId,
-                localSettingManager.localSettingState.value.shunt,
                 onSuccess
             )
         }
@@ -765,4 +764,3 @@ private fun ChapterPickerDialog(
         }
     )
 }
-

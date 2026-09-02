@@ -156,7 +156,7 @@ class UserViewModel(
         _selectedFolderId,
         currentUserId
     ) { order, localSetting, filter, folderId, _ ->
-        CollectPagerKey(order, localSetting.blockedTagList, filter, folderId)
+        CollectPagerKey(order, localSetting.globalExcludedTags, filter, folderId)
     }.flatMapLatest { key ->
         Pager(
             config = PagingConfig(pageSize = 20, prefetchDistance = 6, initialLoadSize = 20),
@@ -325,7 +325,7 @@ class UserViewModel(
 
     fun refreshCollectTagCounts() {
         viewModelScope.launch {
-            val blockedTagList = localSettingManager.localSettingState.value.blockedTagList
+            val blockedTagList = localSettingManager.localSettingState.value.globalExcludedTags
             val order = _collectComicOrder.value
             val folderId = _selectedFolderId.value
             val tagCounts = mutableMapOf<String, Int>()
@@ -391,7 +391,7 @@ class UserViewModel(
             pagingSourceFactory = {
                 HistoryComicPagingSource(
                     userRepository,
-                    localSetting.blockedTagList
+                    localSetting.globalExcludedTags
                 )
             }
         ).flow

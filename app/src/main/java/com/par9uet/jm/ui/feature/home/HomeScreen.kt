@@ -160,8 +160,8 @@ fun HomeScreen(
     }
 
     // 只在首次进入或数据源变更时请求；从其它页面返回不重新拉取
-    LaunchedEffect(localSetting.comicApiSource) {
-        comicViewModel.ensureHomeComic(localSetting.comicApiSource)
+    LaunchedEffect(Unit) {
+        comicViewModel.ensureHomeComic()
     }
 
     if (homeComicState.list.isEmpty() && homeComicState.isLoading) {
@@ -179,9 +179,7 @@ fun HomeScreen(
 
     val selectedTabIndexState = rememberTabIndexState()
     val categories = homeComicState.list
-    val allExcludedTags = remember(localSetting.blockedTagList, localSetting.homeExcludedTags) {
-        (localSetting.blockedTagList + localSetting.homeExcludedTags).distinct()
-    }
+    val allExcludedTags = localSetting.globalExcludedTags
     // 各分类共享同一个横向滚动位置，切页时标签行不会跳回开头
     val chipsScrollState = rememberScrollState()
 

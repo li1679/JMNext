@@ -6,9 +6,6 @@ import com.par9uet.jm.core.model.APP_LOCK_TYPE_PASSWORD
 import com.par9uet.jm.core.model.APP_LOCK_TYPE_PATTERN
 import com.par9uet.jm.core.model.BlockedTagTemplate
 import com.par9uet.jm.core.model.COLOR_PALETTE_PRESET_DEFAULT
-import com.par9uet.jm.core.model.COMIC_API_SOURCE_BUILTIN
-import com.par9uet.jm.core.model.COMIC_API_SOURCE_MIXED
-import com.par9uet.jm.core.model.COMIC_API_SOURCE_NETWORK
 import com.par9uet.jm.core.model.LauncherDisguise
 import com.par9uet.jm.core.model.LocalSetting
 import com.par9uet.jm.core.common.flattenBlockedTagTemplates
@@ -58,6 +55,15 @@ class LocalSettingStorage(
                 val savedTemplates = normalizeBlockedTagTemplates(
                     runCatching { saved.blockedTagTemplateList }.getOrNull() ?: listOf()
                 )
+                val savedGlobalExcludedTags = normalizeBlockedTagList(
+                    runCatching { saved.globalExcludedTags }.getOrNull() ?: listOf()
+                )
+                val migratedGlobalExcludedTags = if (savedJson.hasField("globalExcludedTags")) {
+                    savedGlobalExcludedTags
+                } else {
+                    // 首页排除是最接近全局语义的旧配置；搜索模板标签不应被静默升级为全局屏蔽。
+                    normalizeBlockedTagList(saved.homeExcludedTags)
+                }
                 val migratedTemplates = if (savedJson.hasField("blockedTagTemplateList")) {
                     savedTemplates
                 } else if (legacyBlockedTags.isNotEmpty()) {
@@ -66,18 +72,6 @@ class LocalSettingStorage(
                     listOf()
                 }
                 saved.copy(
-                    comicApiSourceList = listOf(
-                        COMIC_API_SOURCE_BUILTIN,
-                        COMIC_API_SOURCE_NETWORK,
-                        COMIC_API_SOURCE_MIXED
-                    ),
-                    comicApiSource = if (savedJson.hasField("comicApiSource")) {
-                        listOf(COMIC_API_SOURCE_BUILTIN, COMIC_API_SOURCE_NETWORK, COMIC_API_SOURCE_MIXED)
-                            .firstOrNull { it == saved.comicApiSource }
-                            ?: COMIC_API_SOURCE_BUILTIN
-                    } else {
-                        COMIC_API_SOURCE_BUILTIN
-                    },
                     showComicCacheNotification = if (savedJson.hasField("showComicCacheNotification")) {
                         saved.showComicCacheNotification
                     } else {
@@ -93,8 +87,10 @@ class LocalSettingStorage(
                     } else {
                         LauncherDisguise.Default.id
                     },
-                    blockedTagList = flattenBlockedTagTemplates(migratedTemplates),
+                    blockedTagList = legacyBlockedTags,
                     blockedTagTemplateList = migratedTemplates,
+                    globalExcludedTags = migratedGlobalExcludedTags,
+                    homeExcludedTags = migratedGlobalExcludedTags,
                     appLockPassword = if (savedJson.hasField("appLockPassword")) {
                         saved.appLockPassword ?: ""
                     } else {

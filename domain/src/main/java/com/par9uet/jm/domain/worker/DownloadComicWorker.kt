@@ -97,7 +97,7 @@ class DownloadComicWorker(
             val coverPath = downloadCover(downloadTask, coverOwnerId)
             downloadComicDao.updateCover(UpdateComicCover(comicId, coverPath))
 
-            downloadPicList(downloadTask, localSettingManager.localSettingState.value.shunt)
+            downloadPicList(downloadTask)
             showComicCacheNotification(downloadTask, updateChapterProgress(downloadTask, 1f))
 
             val chapterDirPath = getComicChapterDownloadDir(appContext, downloadTask).absolutePath
@@ -152,10 +152,10 @@ class DownloadComicWorker(
         }
     }
 
-    private suspend fun downloadPicList(downloadTask: DownloadComic, shunt: String): List<String> {
+    private suspend fun downloadPicList(downloadTask: DownloadComic): List<String> {
         return withContext(Dispatchers.IO) {
             val comicId = downloadTask.id
-            when (val data = comicRepository.getComicPicList(comicId, shunt)) {
+            when (val data = comicRepository.getComicPicList(comicId)) {
                 is NetWorkResult.Error -> throw IllegalStateException(data.message)
                 is NetWorkResult.Success<ComicPicListResponse> -> {
                     if (data.data.list.isEmpty()) {

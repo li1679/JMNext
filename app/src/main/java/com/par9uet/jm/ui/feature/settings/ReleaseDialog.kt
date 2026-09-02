@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.par9uet.jm.core.designsystem.util.MarkdownText
+import com.par9uet.jm.core.model.GithubRelease
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,6 +45,7 @@ import com.par9uet.jm.core.designsystem.util.MarkdownText
 internal fun ReleaseDialog(
     release: GithubRelease,
     onCopyDownloadUrl: () -> Unit,
+    onOpenRelease: () -> Unit,
     onDismiss: () -> Unit,
     onDownload: () -> Unit
 ) {
@@ -71,7 +74,7 @@ internal fun ReleaseDialog(
                 ) {
                     Column {
                         Text(
-                            text = "发现新版本",
+                            text = "版本信息",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -122,18 +125,27 @@ internal fun ReleaseDialog(
                         Text("复制链接")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        enabled = release.downloadUrl.isNotBlank(),
-                        onClick = onDownload,
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("下载更新")
+                    if (release.downloadUrl.isNotBlank()) {
+                        Button(
+                            onClick = onDownload,
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("下载 APK")
+                        }
+                    } else {
+                        Button(
+                            onClick = onOpenRelease,
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("打开发布页")
+                        }
                     }
                 }
             }
         }
     }
 }
-

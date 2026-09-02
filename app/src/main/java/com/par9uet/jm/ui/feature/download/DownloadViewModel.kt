@@ -8,13 +8,14 @@ import androidx.paging.cachedIn
 import com.par9uet.jm.data.database.dao.DownloadComicDao
 import com.par9uet.jm.data.database.model.DownloadComic
 import com.par9uet.jm.domain.store.DownloadManager
+import com.par9uet.jm.data.storage.LocalSettingManager
+import com.par9uet.jm.core.common.normalizeBlockedTagList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -33,6 +34,7 @@ data class DownloadComicGroup(
     val id: Int,
     val name: String,
     val authorList: List<String>,
+    val tagList: List<String>,
     val coverPath: String,
     val itemIds: Set<Int>,
     val chapterCount: Int,
@@ -43,7 +45,8 @@ data class DownloadComicGroup(
 
 class DownloadViewModel(
     private val downloadComicDao: DownloadComicDao,
-    private val downloadManager: DownloadManager
+    private val downloadManager: DownloadManager,
+    private val localSettingManager: LocalSettingManager,
 ) : ViewModel() {
     private val _downloadFilterState = MutableStateFlow(DownloadFilter("downloading"))
     val downloadFilterState = _downloadFilterState.asStateFlow()
@@ -60,17 +63,26 @@ class DownloadViewModel(
     val errorList = downloadComicDao.observeErrorList()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val completeGroups = downloadComicDao.observeCompleteList()
-        .map(::groupDownloads)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    val activeGroups = combine(activeList, completeList) { activeItems, completeItems ->
-        groupActiveDownloads(activeItems, completeItems)
+    val completeGroups = combine(
+        downloadComicDao.observeCompleteList(),
+        localSettingManager.localSettingState
+    ) { items, setting ->
+        groupDownloads(items).filterNot { it.tagList.isBlockedBy(setting.globalExcludedTags) }
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val errorGroups = downloadComicDao.observeErrorList()
-        .map(::groupDownloads)
+    val activeGroups = combine(activeList, completeList, localSettingManager.localSettingState) { activeItems, completeItems, setting ->
+        groupActiveDownloads(activeItems, completeItems)
+            .filterNot { it.tagList.isBlockedBy(setting.globalExcludedTags) }
+    }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val errorGroups = combine(
+        downloadComicDao.observeErrorList(),
+        localSettingManager.localSettingState
+    ) { items, setting ->
+        groupDownloads(items).filterNot { it.tagList.isBlockedBy(setting.globalExcludedTags) }
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun updateDownloadStatusFilter(status: String) {
@@ -220,6 +232,7 @@ private fun groupDownloads(items: List<DownloadComic>): List<DownloadComicGroup>
                 id = if (displayItem.groupId != 0) displayItem.groupId else displayItem.id,
                 name = displayItem.groupName.ifBlank { displayItem.name },
                 authorList = displayItem.authorList,
+                tagList = sortedItems.flatMap { it.tagList }.distinct(),
                 coverPath = resolveGroupCoverPath(sortedItems, displayItem),
                 itemIds = sortedItems.map { it.id }.toSet(),
                 chapterCount = sortedItems.size,
@@ -229,6 +242,11 @@ private fun groupDownloads(items: List<DownloadComic>): List<DownloadComicGroup>
             )
         }
         .sortedByDescending { it.latestTime }
+}
+
+private fun List<String>.isBlockedBy(blockedTags: List<String>): Boolean {
+    val blocked = normalizeBlockedTagList(blockedTags).map { it.lowercase() }.toSet()
+    return isNotEmpty() && any { it.trim().lowercase() in blocked }
 }
 
 private fun groupActiveDownloads(

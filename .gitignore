@@ -10,6 +10,7 @@
 .DS_Store
 # 多模块工程下每个模块都有自己的 build/，不能只忽略根目录那一个
 build/
+/.kotlin/
 /captures
 .externalNativeBuild
 .cxx

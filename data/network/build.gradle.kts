@@ -24,7 +24,7 @@ dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     api(project(":core:model"))
     implementation(project(":core:common"))
-    // 拦截器需要读取用户选定的 API 线路
+    // Retrofit CookieJar 与内部图片配置请求需要持久化 Cookie
     implementation(project(":data:storage"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.core)

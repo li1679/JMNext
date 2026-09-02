@@ -23,12 +23,6 @@ class LocalSettingManager(
     private val _localSettingState = MutableStateFlow(LocalSetting())
     val localSettingState = _localSettingState.asStateFlow()
 
-    fun updateComicApiSource(comicApiSource: String) =
-        updateSetting { it.copy(comicApiSource = comicApiSource) }
-
-    fun updatePreferenceRecommendEnabled(enabled: Boolean) =
-        updateSetting { it.copy(preferenceRecommendEnabled = enabled) }
-
     fun updateOnboardingCompleted(completed: Boolean) =
         updateSetting { it.copy(onboardingCompleted = completed) }
 
@@ -38,14 +32,7 @@ class LocalSettingManager(
     fun updateAutoSignInEnabled(enabled: Boolean) =
         updateSetting { it.copy(autoSignInEnabled = enabled) }
 
-    fun updateRecommendSource(source: String) =
-        updateSetting { it.copy(recommendSource = source) }
-
-    fun updateApi(api: String) = updateSetting { it.copy(api = api) }
-
     fun updateTheme(theme: String) = updateSetting { it.copy(theme = theme) }
-
-    fun updateShunt(shunt: String) = updateSetting { it.copy(shunt = shunt) }
 
     fun updatePrefetchCount(prefetchCount: String) =
         updateSetting { it.copy(prefetchCount = prefetchCount.toInt()) }
@@ -184,7 +171,18 @@ class LocalSettingManager(
         updateSetting { it.copy(searchGridColumns = columns.coerceIn(0, 6)) }
 
     fun updateHomeExcludedTags(tags: List<String>) =
-        updateSetting { it.copy(homeExcludedTags = tags) }
+        updateGlobalExcludedTags(tags)
+
+    fun updateGlobalExcludedTags(tags: List<String>) {
+        val normalized = normalizeBlockedTagList(tags)
+        updateSetting {
+            it.copy(
+                globalExcludedTags = normalized,
+                // 保持旧备份字段同步，便于旧版本恢复后仍能看到配置。
+                homeExcludedTags = normalized,
+            )
+        }
+    }
 
     fun updateReadDecodeConcurrency(concurrency: Int) =
         updateSetting { it.copy(readDecodeConcurrency = concurrency.coerceIn(1, 4)) }

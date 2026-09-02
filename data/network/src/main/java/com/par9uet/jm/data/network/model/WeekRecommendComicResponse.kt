@@ -42,7 +42,6 @@ data class WeekRecommendComicResponse(
                 workList = listOf(),
                 isLike = false,
                 isCollect = false,
-                relateComicList = listOf(),
                 comicChapterList = listOf(),
                 price = 0,
                 isBuy = false,

@@ -1,8 +1,5 @@
 package com.par9uet.jm.core.model
 
-const val COMIC_API_SOURCE_BUILTIN = "builtin"
-const val COMIC_API_SOURCE_NETWORK = "network"
-const val COMIC_API_SOURCE_MIXED = "mixed"
 const val APP_LOCK_TYPE_PASSWORD = "password"
 const val APP_LOCK_TYPE_PATTERN = "pattern"
 
@@ -12,36 +9,12 @@ data class BlockedTagTemplate(
 )
 
 data class LocalSetting(
-    val comicApiSourceList: List<String> = listOf(
-        COMIC_API_SOURCE_BUILTIN,
-        COMIC_API_SOURCE_NETWORK,
-        COMIC_API_SOURCE_MIXED,
-    ),
-    val comicApiSource: String = COMIC_API_SOURCE_BUILTIN,
-    // 偏好推荐开关：开启后将请求网络 API 获取基于登录账号的个性化推荐，可能不稳定
-    val preferenceRecommendEnabled: Boolean = false,
-    // API 线路。实测 www.cdnmhwscc.vip 已失效（/setting 返回 404），故移除；
-    // 线路失效时 BaseUrlInterceptor 会自动按顺序回退到后面的候选线路
-    val apiList: List<String> = listOf(
-        "https://www.cdnhth.club",
-        "https://www.jmapiproxyxxx.vip",
-        "https://www.jmeadpoolcdn.life",
-        "https://www.cdnxxx-proxy.xyz"
-    ),
-    val api: String = apiList[0],
     val themeList: List<String> = listOf(
         "auto",
         "light",
         "dark",
     ),
     val theme: String = "auto",
-    val shunt: String = "1",
-    val shuntList: List<String> = listOf(
-        "1",
-        "2",
-        "3",
-        "4",
-    ),
     // 阅读页预先加载的图片张数
     val prefetchCount: Int = 3,
     // scroll || page || tap
@@ -71,8 +44,6 @@ data class LocalSetting(
     val clipboardAutoDetectEnabled: Boolean = false,
     // 自动签到：应用启动时若已登录且今日未签到则自动签到，默认关闭
     val autoSignInEnabled: Boolean = false,
-    // 推荐源："builtin"（内置 API 推荐）或 "network"（网络 API 推荐）
-    val recommendSource: String = "builtin",
     // 调色板预设 ID："default" 表示用主题默认配色，其余为内置预设方案 ID
     val colorPalettePreset: String = COLOR_PALETTE_PRESET_DEFAULT,
     // 自定义四色（ARGB hex 字符串，形如 "#FF4F5F7F"）；null 表示跟随预设
@@ -90,7 +61,10 @@ data class LocalSetting(
     // 阅读并发解码上限，推荐值 2
     val readDecodeConcurrency: Int = 2,
     // 首页推荐排除标签：带有这些标签的漫画不会出现在首页推荐中
+    // 保留该字段用于兼容旧版备份；新代码使用 globalExcludedTags。
     val homeExcludedTags: List<String> = listOf(),
+    // 全局排除标签：所有作品列表均不显示包含这些标签的漫画
+    val globalExcludedTags: List<String> = listOf(),
 )
 
 const val COLOR_PALETTE_PRESET_DEFAULT = "default"

@@ -30,7 +30,6 @@ import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Login
 import androidx.compose.material.icons.rounded.Notifications
-import androidx.compose.material.icons.rounded.Recommend
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material.icons.rounded.WavingHand
@@ -85,7 +84,6 @@ fun WelcomeScreen(
     val loginState by userViewModel.loginState.collectAsStateWithLifecycle()
 
     var step by remember { mutableStateOf(0) }
-    var preferenceStepHandled by remember { mutableStateOf(false) }
 
     // 提升到顶层的状态，供内容区和按钮区共享
     var appLockEnabled by remember { mutableStateOf(localSetting.appLockEnabled) }
@@ -172,13 +170,7 @@ fun WelcomeScreen(
                             if (isLogin) {
                                 StepButtons(
                                     primaryText = "下一步",
-                                    onPrimary = {
-                                        if (!preferenceStepHandled) {
-                                            step = 7
-                                        } else {
-                                            skipOnboarding()
-                                        }
-                                    }
+                                    onPrimary = { step = 7 }
                                 )
                             } else {
                                 StepButtons(
@@ -196,15 +188,8 @@ fun WelcomeScreen(
                             }
                         }
                         7 -> StepButtons(
-                            primaryText = "下一步",
-                            onPrimary = { step = 8 }
-                        )
-                        8 -> StepButtons(
                             primaryText = "完成",
-                            onPrimary = {
-                                preferenceStepHandled = true
-                                skipOnboarding()
-                            }
+                            onPrimary = { skipOnboarding() }
                         )
                     }
                 }
@@ -295,12 +280,6 @@ fun WelcomeScreen(
                     7 -> AutoSignInStepContent(
                         enabled = localSetting.autoSignInEnabled,
                         onToggle = { localSettingManager.updateAutoSignInEnabled(it) }
-                    )
-                    8 -> PreferenceRecommendStepContent(
-                        enabled = localSetting.preferenceRecommendEnabled,
-                        recommendSource = localSetting.recommendSource,
-                        onToggle = { localSettingManager.updatePreferenceRecommendEnabled(it) },
-                        onRecommendSourceChange = { localSettingManager.updateRecommendSource(it) }
                     )
                 }
             }
@@ -456,7 +435,7 @@ private fun DataSourceStepContent() {
     StepHeader(
         icon = Icons.Rounded.Storage,
         title = "数据源说明",
-        description = "本应用支持两种数据源：\n\n内置 API：稳定可靠，无需额外配置，但无个性化推荐。\n\n网络 API：可配置自定义域名，支持基于登录账号的个性化推荐，但需要手动配置且可能不稳定。\n\n默认使用内置 API，你稍后可在设置中切换。"
+        description = "本应用使用内置 API 提供漫画浏览、搜索、登录、收藏、评论与阅读功能。无需配置 API 地址，打开应用即可使用。"
     )
 }
 
@@ -686,63 +665,6 @@ private fun AutoSignInStepContent(
         ) {
             Text("启用自动签到", style = MaterialTheme.typography.bodyLarge)
             Switch(checked = enabled, onCheckedChange = onToggle)
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PreferenceRecommendStepContent(
-    enabled: Boolean,
-    recommendSource: String,
-    onToggle: (Boolean) -> Unit,
-    onRecommendSourceChange: (String) -> Unit,
-) {
-    StepWithControlLayout(
-        icon = Icons.Rounded.Recommend,
-        title = "偏好推荐（可选）",
-        description = "已检测到登录。开启后将在首页显示基于你账号的个性化推荐分类。可在内置 API 推荐（基于收藏标签的客户端推荐）与网络 API 推荐之间切换。"
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("启用偏好推荐", style = MaterialTheme.typography.bodyLarge)
-            Switch(checked = enabled, onCheckedChange = onToggle)
-        }
-        if (enabled) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                "推荐源",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = recommendSource == "builtin",
-                    onClick = { onRecommendSourceChange("builtin") },
-                    label = { Text("内置 API 推荐") }
-                )
-                FilterChip(
-                    selected = recommendSource == "network",
-                    onClick = { onRecommendSourceChange("network") },
-                    label = { Text("网络 API 推荐") }
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = if (recommendSource == "builtin")
-                    "内置 API 推荐：基于你的收藏标签偏好在客户端计算推荐，不依赖网络 API。"
-                else
-                    "网络 API 推荐：请求网络 API 获取基于登录账号的个性化推荐，可能不稳定。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

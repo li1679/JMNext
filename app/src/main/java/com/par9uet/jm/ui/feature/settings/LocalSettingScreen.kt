@@ -39,7 +39,6 @@ import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Recommend
-import androidx.compose.material.icons.rounded.Source
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Tune
@@ -74,9 +73,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.par9uet.jm.core.model.COMIC_API_SOURCE_BUILTIN
-import com.par9uet.jm.core.model.COMIC_API_SOURCE_MIXED
-import com.par9uet.jm.core.model.COMIC_API_SOURCE_NETWORK
 import com.par9uet.jm.core.model.LauncherDisguise
 import com.par9uet.jm.core.model.LocalSetting
 import com.par9uet.jm.data.storage.LocalSettingManager
@@ -86,16 +82,12 @@ import com.par9uet.jm.core.designsystem.component.SelectOption
 import org.koin.compose.getKoin
 
 private sealed class SettingType {
-    object ComicApiSource : SettingType()
-    object Api : SettingType()
     object Theme : SettingType()
     object LauncherDisguise : SettingType()
-    object Shunt : SettingType()
     object PrefetchCount : SettingType()
     object ReadMode : SettingType()
     object ReadTapMode : SettingType()
     object NotificationManagement : SettingType()
-    object RecommendSource : SettingType()
     object AllGridColumns : SettingType()
     object ReadDecodeConcurrency : SettingType()
 }
@@ -110,12 +102,6 @@ private val themeTextMap = mapOf(
     "dark" to "\u591c\u95f4\u6a21\u5f0f",
 )
 
-private val comicApiSourceTextMap = mapOf(
-    COMIC_API_SOURCE_BUILTIN to "\u5185\u7f6e API",
-    COMIC_API_SOURCE_NETWORK to "\u7f51\u7edc API",
-    COMIC_API_SOURCE_MIXED to "\u6df7\u5408 API",
-)
-
 private fun gridColumnsText(columns: Int): String =
     if (columns == 0) "\u81ea\u9002\u5e94" else "$columns \u5217"
 
@@ -125,9 +111,9 @@ fun LocalSettingScreen(
 ) {
     val mainNavController = LocalMainNavController.current
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
-    var settingType by remember { mutableStateOf<SettingType>(SettingType.Api) }
+    var settingType by remember { mutableStateOf<SettingType>(SettingType.Theme) }
     var isOpenSettingSelectDialog by remember { mutableStateOf(false) }
-    var showHomeExcludedTagsDialog by remember { mutableStateOf(false) }
+    var showGlobalExcludedTagsDialog by remember { mutableStateOf(false) }
 
     fun openSetting(type: SettingType) {
         settingType = type
@@ -191,6 +177,13 @@ fun LocalSettingScreen(
                     ) {
                         openSetting(SettingType.AllGridColumns)
                     }
+                    SettingsRow(
+                        icon = Icons.Rounded.Block,
+                        title = "全局排除标签",
+                        value = if (localSetting.globalExcludedTags.isEmpty()) "未设置" else "${localSetting.globalExcludedTags.size} 个标签"
+                    ) {
+                        showGlobalExcludedTagsDialog = true
+                    }
                 }
             }
             item {
@@ -206,51 +199,13 @@ fun LocalSettingScreen(
             }
             item {
                 SettingsSection(title = "\u8fde\u63a5") {
-                    SettingsRow(
-                        Icons.Rounded.Api,
-                        "\u6570\u636e\u6e90",
-                        comicApiSourceTextMap[localSetting.comicApiSource].orEmpty()
-                    ) {
-                        openSetting(SettingType.ComicApiSource)
-                    }
-                    if (localSetting.comicApiSource == COMIC_API_SOURCE_NETWORK || localSetting.comicApiSource == COMIC_API_SOURCE_MIXED) {
-                        SettingsRow(Icons.Rounded.Api, "API", localSetting.api) {
-                            openSetting(SettingType.Api)
-                        }
-                        SettingsRow(Icons.Rounded.Image, "\u56fe\u7247\u7ebf\u8def", "\u7ebf\u8def ${localSetting.shunt}") {
-                            openSetting(SettingType.Shunt)
-                        }
-                    }
-                    if (localSetting.comicApiSource == COMIC_API_SOURCE_BUILTIN || localSetting.comicApiSource == COMIC_API_SOURCE_MIXED) {
-                        SettingsSwitchRow(
-                            icon = Icons.Rounded.Recommend,
-                            title = "\u504f\u597d\u63a8\u8350",
-                            value = localSetting.preferenceRecommendEnabled,
-                            onCheckedChange = { localSettingManager.updatePreferenceRecommendEnabled(it) }
-                        )
-                        if (localSetting.preferenceRecommendEnabled) {
-                            Text(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                text = "\u5f00\u542f\u540e\u5c06\u8bf7\u6c42\u7f51\u7edc API \u83b7\u53d6\u57fa\u4e8e\u767b\u5f55\u8d26\u53f7\u7684\u4e2a\u6027\u5316\u63a8\u8350\uff0c\u53ef\u80fd\u4e0d\u7a33\u5b9a",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            SettingsRow(
-                                icon = Icons.Rounded.Source,
-                                title = "\u63a8\u8350\u6e90",
-                                value = if (localSetting.recommendSource == "builtin") "\u5185\u7f6e API \u63a8\u8350" else "\u7f51\u7edc API \u63a8\u8350"
-                            ) {
-                                openSetting(SettingType.RecommendSource)
-                            }
-                        }
-                        SettingsRow(
-                            icon = Icons.Rounded.Block,
-                            title = "\u9996\u9875\u6807\u7b7e\u6392\u9664",
-                            value = if (localSetting.homeExcludedTags.isEmpty()) "\u672a\u8bbe\u7f6e" else "${localSetting.homeExcludedTags.size} \u4e2a\u6807\u7b7e"
-                        ) {
-                            showHomeExcludedTagsDialog = true
-                        }
-                    }
+                    SettingsBaseRow(
+                        icon = Icons.Rounded.Api,
+                        title = "\u6570\u636e\u6e90",
+                        value = "\u5185\u7f6e API",
+                        onClick = {},
+                        trailingContent = {}
+                    )
                 }
             }
             item {
@@ -325,14 +280,14 @@ fun LocalSettingScreen(
                 onDismiss = { isOpenSettingSelectDialog = false }
             )
         }
-        if (showHomeExcludedTagsDialog) {
-            HomeExcludedTagsDialog(
-                tags = localSetting.homeExcludedTags,
+        if (showGlobalExcludedTagsDialog) {
+            GlobalExcludedTagsDialog(
+                tags = localSetting.globalExcludedTags,
                 onConfirm = { tags ->
-                    localSettingManager.updateHomeExcludedTags(tags)
-                    showHomeExcludedTagsDialog = false
+                    localSettingManager.updateGlobalExcludedTags(tags)
+                    showGlobalExcludedTagsDialog = false
                 },
-                onDismiss = { showHomeExcludedTagsDialog = false }
+                onDismiss = { showGlobalExcludedTagsDialog = false }
             )
         }
     }
@@ -365,30 +320,11 @@ private fun SettingSelectDialogContent(
         )
         return
     }
-    val apiSelectOptionList by remember(localSetting.apiList) {
-        derivedStateOf { localSetting.apiList.map { SelectOption(it.removePrefix("https://"), it) } }
-    }
-    val recommendSourceOptionList = remember {
-        listOf(
-            SelectOption("\u5185\u7f6e API \u63a8\u8350", "builtin"),
-            SelectOption("\u7f51\u7edc API \u63a8\u8350", "network")
-        )
-    }
-    val comicApiSourceOptionList by remember(localSetting.comicApiSourceList) {
-        derivedStateOf {
-            localSetting.comicApiSourceList.map {
-                SelectOption(comicApiSourceTextMap[it].orEmpty(), it)
-            }
-        }
-    }
     val themeSelectOptionList by remember(localSetting.themeList) {
         derivedStateOf { localSetting.themeList.map { SelectOption(themeTextMap[it].orEmpty(), it) } }
     }
     val launcherDisguiseOptionList by remember {
         derivedStateOf { LauncherDisguise.entries.map { SelectOption(it.label, it.id) } }
-    }
-    val shuntOptionList by remember(localSetting.shuntList) {
-        derivedStateOf { localSetting.shuntList.map { SelectOption("\u7ebf\u8def $it", it) } }
     }
     val prefetchCountOptionList by remember {
         derivedStateOf {
@@ -443,25 +379,18 @@ private fun SettingSelectDialogContent(
         title = settingTitle(settingType),
         value = settingValue(settingType, localSetting),
         selectOptionList = when (settingType) {
-            is SettingType.ComicApiSource -> comicApiSourceOptionList
-            is SettingType.Api -> apiSelectOptionList
             is SettingType.Theme -> themeSelectOptionList
             is SettingType.LauncherDisguise -> launcherDisguiseOptionList
-            is SettingType.Shunt -> shuntOptionList
             is SettingType.PrefetchCount -> prefetchCountOptionList
             is SettingType.ReadMode -> readModeOptionList
             is SettingType.ReadTapMode -> readTapModeOptionList
             is SettingType.NotificationManagement -> notificationOptionList
-            is SettingType.RecommendSource -> recommendSourceOptionList
             is SettingType.ReadDecodeConcurrency -> readDecodeConcurrencyOptionList
         },
         onSelect = {
             when (settingType) {
-                is SettingType.ComicApiSource -> localSettingManager.updateComicApiSource(it)
-                is SettingType.Api -> localSettingManager.updateApi(it)
                 is SettingType.Theme -> localSettingManager.updateTheme(it)
                 is SettingType.LauncherDisguise -> localSettingManager.updateLauncherDisguise(it)
-                is SettingType.Shunt -> localSettingManager.updateShunt(it)
                 is SettingType.PrefetchCount -> localSettingManager.updatePrefetchCount(it)
                 is SettingType.ReadMode -> localSettingManager.updateReadMode(it)
                 is SettingType.ReadTapMode -> localSettingManager.updateReadTapMode(it)
@@ -471,7 +400,6 @@ private fun SettingSelectDialogContent(
                         showName = it == NOTIFICATION_ON_WITH_NAME
                     )
                 }
-                is SettingType.RecommendSource -> localSettingManager.updateRecommendSource(it)
                 is SettingType.ReadDecodeConcurrency -> localSettingManager.updateReadDecodeConcurrency(it.toIntOrNull() ?: 2)
             }
             onDismiss()
@@ -563,7 +491,7 @@ private fun AllGridColumnSliderDialog(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun HomeExcludedTagsDialog(
+private fun GlobalExcludedTagsDialog(
     tags: List<String>,
     onConfirm: (List<String>) -> Unit,
     onDismiss: () -> Unit,
@@ -573,11 +501,11 @@ private fun HomeExcludedTagsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("首页标签排除") },
+        title = { Text("全局排除标签") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "添加标签后，首页推荐将不再显示包含这些标签的漫画",
+                    "添加标签后，所有作品列表都不会显示包含这些标签的漫画",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -591,7 +519,7 @@ private fun HomeExcludedTagsDialog(
                         IconButton(
                             onClick = {
                                 val trimmed = text.trim()
-                                if (trimmed.isNotEmpty() && trimmed !in currentTags) {
+                                if (trimmed.isNotEmpty() && currentTags.none { it.equals(trimmed, ignoreCase = true) }) {
                                     currentTags = currentTags + trimmed
                                     text = ""
                                 }
@@ -651,7 +579,7 @@ private fun SettingsSection(
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
@@ -777,16 +705,12 @@ private fun notificationText(localSetting: LocalSetting): String {
 
 private fun settingTitle(type: SettingType): String {
     return when (type) {
-        is SettingType.ComicApiSource -> "\u6570\u636e\u6e90"
-        is SettingType.Api -> "API"
         is SettingType.Theme -> "\u4e3b\u9898"
         is SettingType.LauncherDisguise -> "\u56fe\u6807\u4f2a\u88c5"
-        is SettingType.Shunt -> "\u56fe\u7247\u7ebf\u8def"
         is SettingType.PrefetchCount -> "\u56fe\u7247\u9884\u52a0\u8f7d"
         is SettingType.ReadMode -> "\u9605\u8bfb\u6a21\u5f0f"
         is SettingType.ReadTapMode -> "\u70b9\u51fb\u7ffb\u56fe"
         is SettingType.NotificationManagement -> "\u901a\u77e5\u7ba1\u7406"
-        is SettingType.RecommendSource -> "\u63a8\u8350\u6e90"
         is SettingType.AllGridColumns -> "\u7f51\u683c\u5217\u6570"
         is SettingType.ReadDecodeConcurrency -> "\u5e76\u53d1\u89e3\u7801\u6570"
     }
@@ -794,11 +718,8 @@ private fun settingTitle(type: SettingType): String {
 
 private fun settingValue(type: SettingType, localSetting: LocalSetting): String {
     return when (type) {
-        is SettingType.ComicApiSource -> localSetting.comicApiSource
-        is SettingType.Api -> localSetting.api
         is SettingType.Theme -> localSetting.theme
         is SettingType.LauncherDisguise -> LauncherDisguise.fromId(localSetting.launcherDisguise).id
-        is SettingType.Shunt -> localSetting.shunt
         is SettingType.PrefetchCount -> "${localSetting.prefetchCount}"
         is SettingType.ReadMode -> localSetting.readMode
         is SettingType.ReadTapMode -> localSetting.readTapMode
@@ -807,7 +728,6 @@ private fun settingValue(type: SettingType, localSetting: LocalSetting): String 
             localSetting.showComicCacheNotificationName -> NOTIFICATION_ON_WITH_NAME
             else -> NOTIFICATION_ON_WITHOUT_NAME
         }
-        is SettingType.RecommendSource -> localSetting.recommendSource
         is SettingType.AllGridColumns -> ""
         is SettingType.ReadDecodeConcurrency -> "${localSetting.readDecodeConcurrency}"
     }

@@ -30,7 +30,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.ChatBubbleOutline
@@ -83,6 +82,8 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.data.storage.ComicReadHistory
+import com.par9uet.jm.data.storage.LocalSettingManager
+import com.par9uet.jm.core.common.isBlockedByTags
 import com.par9uet.jm.domain.store.DownloadManager
 import com.par9uet.jm.domain.store.ReadHistoryManager
 import com.par9uet.jm.domain.store.RemoteSettingManager
@@ -90,6 +91,7 @@ import com.par9uet.jm.domain.store.UserManager
 import com.par9uet.jm.ui.component.ChapterMultiSelectDialog
 import com.par9uet.jm.ui.component.ComicContentTag
 import com.par9uet.jm.ui.component.ComicCoverImage
+import com.par9uet.jm.ui.component.CommonScaffold
 import com.par9uet.jm.ui.component.ComicRoleTag
 import com.par9uet.jm.ui.component.ComicWorkTag
 import com.par9uet.jm.ui.feature.detail.ComicDetailViewModel
@@ -175,12 +177,14 @@ fun ComicDetailScreen(
     comicDetailViewModel: ComicDetailViewModel = koinActivityViewModel(),
     readHistoryManager: ReadHistoryManager = getKoin().get(),
     downloadManager: DownloadManager = getKoin().get(),
-    userManager: UserManager = getKoin().get()
+    userManager: UserManager = getKoin().get(),
+    localSettingManager: LocalSettingManager = getKoin().get(),
 ) {
     val mainNavController = LocalMainNavController.current
     val comicDetailState by comicDetailViewModel.comicDetailState.collectAsStateWithLifecycle()
     val readHistory by readHistoryManager.readHistoryState.collectAsStateWithLifecycle()
     val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
+    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     var showDownloadChapterDialog by remember { mutableStateOf(false) }
     var selectedChapterIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
 
@@ -234,6 +238,19 @@ fun ComicDetailScreen(
         return
     }
 
+    if (comicDetailState.data?.isBlockedByTags(localSetting.globalExcludedTags) == true) {
+        CommonScaffold(title = "已排除") {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "该作品命中全局排除标签",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        return
+    }
+
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
@@ -282,17 +299,12 @@ fun ComicDetailScreen(
                     requireLogin {
                         if (comic.isCollect) {
                             comicDetailViewModel.unCollect(comic.id)
-                        } else if (comicDetailViewModel.shouldShowFolderPicker()) {
-                            // 内置 API 模式：弹出收藏夹选择
+                        } else {
                             comicDetailViewModel.refreshFolderList()
                             comicDetailViewModel.showFolderPicker()
-                        } else {
-                            // 网络 API 模式：直接收藏到默认夹
-                            comicDetailViewModel.collect(comic.id)
                         }
                     }
                 },
-                onRelated = { mainNavController.navigate("comicRelate/${comic.id}") },
                 onDownload = {
                     if (comic.comicChapterList.isEmpty()) {
                         downloadManager.downloadComic(comic)
@@ -410,7 +422,7 @@ fun ComicDetailScreen(
             }
         }
 
-        // 收藏夹选择弹窗（仅内置 API 模式）
+        // 收藏夹选择弹窗
         val showFolderPicker by comicDetailViewModel.showFolderPicker.collectAsStateWithLifecycle()
         val folderList by comicDetailViewModel.folderList.collectAsStateWithLifecycle()
         if (showFolderPicker) {
@@ -478,7 +490,6 @@ private fun ComicDetailBottomBar(
     readHistory: Map<Int, ComicReadHistory>,
     onLike: () -> Unit,
     onCollect: () -> Unit,
-    onRelated: () -> Unit,
     onDownload: () -> Unit,
     onRead: (Int) -> Unit,
     onChapters: () -> Unit,
@@ -519,9 +530,6 @@ private fun ComicDetailBottomBar(
                     } else {
                         Icon(Icons.Filled.BookmarkBorder, contentDescription = "收藏")
                     }
-                }
-                IconButton(onClick = onRelated) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = "相关")
                 }
                 IconButton(onClick = onDownload) {
                     Icon(Icons.Default.Download, contentDescription = "缓存")

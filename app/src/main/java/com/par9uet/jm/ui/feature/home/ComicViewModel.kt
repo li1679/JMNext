@@ -40,25 +40,25 @@ class ComicViewModel(
     private val _homeComicState = MutableStateFlow(HomeComicUIState())
     val homeComicState = _homeComicState.asStateFlow()
 
-    /** 已成功加载过首页数据时所用的数据源，null 表示尚未加载成功 */
-    private var loadedApiSource: String? = null
+    /** 已成功加载过首页数据后避免重复请求 */
+    private var homeLoaded = false
 
     /**
      * 按需加载。首页是 Tab 页，导航返回时 NavHost 会重建 composable 并重跑 LaunchedEffect，
      * 在那里直接请求会让每次退回首页都整页重刷。仅在未加载成功或数据源变更时发请求，
      * 主动刷新走 [refreshHomeComic]。
      */
-    fun ensureHomeComic(apiSource: String) {
-        if (loadedApiSource == apiSource && _homeComicState.value.list.isNotEmpty()) return
-        loadHomeComic(apiSource)
+    fun ensureHomeComic() {
+        if (homeLoaded && _homeComicState.value.list.isNotEmpty()) return
+        loadHomeComic()
     }
 
     /** 下拉刷新：无条件重新请求 */
     fun refreshHomeComic() {
-        loadHomeComic(localSettingManager.localSettingState.value.comicApiSource)
+        loadHomeComic()
     }
 
-    private fun loadHomeComic(apiSource: String) {
+    private fun loadHomeComic() {
         viewModelScope.launch {
             _homeComicState.update {
                 it.copy(
@@ -75,8 +75,7 @@ class ComicViewModel(
                 }
 
                 is NetWorkResult.Success<List<HomeSwiperComicListItemResponse>> -> {
-                    // 只有成功才记录数据源，失败时下次进入应当重试
-                    loadedApiSource = apiSource
+                    homeLoaded = true
                     _homeComicState.update {
                         it.copy(list = data.data.map { item -> item.toHomeComicSwiperItem() })
                     }
@@ -97,7 +96,7 @@ class ComicViewModel(
     val searchComicPager = combine(
         _searchComicFilterState,
         localSettingManager.localSettingState
-    ) { filter, localSetting -> filter to localSetting.blockedTagList }
+    ) { filter, localSetting -> filter to localSetting.globalExcludedTags }
         .flatMapLatest { (filter, blockedTagList) ->
         Pager(
             config = PagingConfig(
@@ -210,7 +209,7 @@ class ComicViewModel(
         _weekFilterState,
         localSettingManager.localSettingState
     ) { filter, localSetting ->
-        filter to (localSetting.blockedTagList + localSetting.homeExcludedTags).distinct()
+        filter to localSetting.globalExcludedTags
     }
         .flatMapLatest { (filter, blockedTagList) ->
         Pager(

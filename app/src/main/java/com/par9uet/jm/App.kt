@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +34,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.compose.rememberNavController
 import com.par9uet.jm.data.storage.LocalSettingManager
+import com.par9uet.jm.data.repository.ComicRepository
 import com.par9uet.jm.core.common.ToastManager
 import com.par9uet.jm.domain.store.UserManager
 import com.par9uet.jm.ui.feature.settings.AppLockScreen
@@ -70,7 +72,8 @@ fun App(
     localSettingManager: LocalSettingManager = getKoin().get(),
     userManager: UserManager = getKoin().get(),
     remoteSettingManager: com.par9uet.jm.domain.store.RemoteSettingManager = getKoin().get(),
-    imageLoader: coil.ImageLoader = getKoin().get()
+    imageLoader: coil.ImageLoader = getKoin().get(),
+    comicRepository: ComicRepository = getKoin().get()
 ) {
     LaunchedEffect(Unit) {
         globalViewModel.init()
@@ -157,6 +160,7 @@ fun App(
     var clipboardDetectLoading by remember { mutableStateOf(false) }
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     var lastClipboardText by remember { mutableStateOf("") }
+    val latestClipboardText by rememberUpdatedState(lastClipboardText)
     var pendingNavComicId by remember { mutableStateOf(-1) }
     val mainNavController = rememberNavController()
 
@@ -167,7 +171,7 @@ fun App(
             val observer = LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) {
                     val clipText = clipboardManager.getText()?.text ?: ""
-                    if (clipText.isNotBlank() && clipText != lastClipboardText) {
+                    if (clipText.isNotBlank() && clipText != latestClipboardText) {
                         lastClipboardText = clipText
                         val comicId = extractComicId(clipText)
                         if (comicId != null) {
@@ -183,7 +187,6 @@ fun App(
     }
 
     // 剪切板检测后获取详情
-    val comicRepository = remember { org.koin.core.context.GlobalContext.get().get<com.par9uet.jm.data.repository.ComicRepository>() }
     LaunchedEffect(clipboardDetectedComicId) {
         val id = clipboardDetectedComicId ?: return@LaunchedEffect
         clipboardDetectLoading = true

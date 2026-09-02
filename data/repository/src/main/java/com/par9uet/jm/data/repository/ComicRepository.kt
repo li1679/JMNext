@@ -19,7 +19,7 @@ interface ComicRepository {
     suspend fun collectComic(id: Int): NetWorkResult<CollectComicResponse>
     suspend fun unCollectComic(id: Int): NetWorkResult<CollectComicResponse>
     suspend fun getHomeSwiperComicList(): NetWorkResult<List<HomeSwiperComicListItemResponse>>
-    suspend fun getComicPicList(id: Int, shunt: String): NetWorkResult<ComicPicListResponse>
+    suspend fun getComicPicList(id: Int): NetWorkResult<ComicPicListResponse>
     suspend fun downloadImageBytes(comicId: Int, imageIndex: Int): ByteArray?
     suspend fun getComicList(
         page: Int,

@@ -12,7 +12,7 @@ class RemoteSettingRepositoryImpl(
     initManager: InitManager
 ) : BaseRepository(initManager), RemoteSettingRepository {
     override suspend fun getRemoteSetting(): NetWorkResult<RemoteSettingResponse> {
-        return safeApiCall {
+        return safeApiCall(awaitInit = false) {
             service.getRemoteSetting()
         }
     }

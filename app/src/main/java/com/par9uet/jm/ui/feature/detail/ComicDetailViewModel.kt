@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.cachedIn
-import com.par9uet.jm.core.model.COMIC_API_SOURCE_BUILTIN
 import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.data.database.dao.DownloadComicDao
 import com.par9uet.jm.data.repository.ComicRepository
@@ -15,7 +14,6 @@ import com.par9uet.jm.data.network.model.ComicDetailResponse
 import com.par9uet.jm.data.network.model.CommentComicResponse
 import com.par9uet.jm.data.network.model.LikeComicResponse
 import com.par9uet.jm.data.network.model.NetWorkResult
-import com.par9uet.jm.data.storage.LocalSettingManager
 import com.par9uet.jm.domain.store.RemoteSettingManager
 import com.par9uet.jm.core.common.ToastManager
 import com.par9uet.jm.core.model.CommonUIState
@@ -35,7 +33,6 @@ class ComicDetailViewModel(
     private val downloadComicDao: DownloadComicDao,
     private val remoteSettingManager: RemoteSettingManager,
     private val userRepository: UserRepository,
-    private val localSettingManager: LocalSettingManager,
 ) : ViewModel() {
     private val _comicDetailState = MutableStateFlow<CommonUIState<Comic>>(
         CommonUIState(
@@ -223,10 +220,6 @@ class ComicDetailViewModel(
 
     private val _showFolderPicker = MutableStateFlow(false)
     val showFolderPicker = _showFolderPicker.asStateFlow()
-
-    fun shouldShowFolderPicker(): Boolean {
-        return localSettingManager.localSettingState.value.comicApiSource == COMIC_API_SOURCE_BUILTIN
-    }
 
     fun refreshFolderList() {
         viewModelScope.launch {

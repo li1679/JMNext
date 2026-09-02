@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -67,7 +69,7 @@ private data class ColorPreset(
 )
 
 private val COLOR_PRESETS = listOf(
-    ColorPreset(COLOR_PALETTE_PRESET_DEFAULT, "默认蓝", listOf(0xFF4F5F7F, 0xFF5A5D72, 0xFF75546F, 0xFFBA1A1A)),
+    ColorPreset(COLOR_PALETTE_PRESET_DEFAULT, "默认中性", listOf(0xFF4F5F7F, 0xFF5A5D72, 0xFF75546F, 0xFFBA1A1A)),
     ColorPreset(COLOR_PALETTE_PRESET_OCEAN, "海洋青", listOf(0xFF00696D, 0xFF4A6364, 0xFF48607E, 0xFFBA1A1A)),
     ColorPreset(COLOR_PALETTE_PRESET_SUNSET, "日落橙", listOf(0xFF8C5000, 0xFF735C2D, 0xFF9C4146, 0xFFBA1A1A)),
     ColorPreset(COLOR_PALETTE_PRESET_FOREST, "森林绿", listOf(0xFF2E6B3E, 0xFF4F6352, 0xFF38656A, 0xFFBA1A1A)),
@@ -91,6 +93,11 @@ fun ColorPaletteScreen(
 ) {
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val isDarkTheme = when (localSetting.theme) {
+        "dark" -> true
+        "light" -> false
+        else -> isSystemInDarkTheme()
+    }
 
     var editingSlot by remember { mutableStateOf<ColorSlot?>(null) }
 
@@ -100,7 +107,7 @@ fun ColorPaletteScreen(
         if (localSetting.colorPalettePreset == COLOR_PALETTE_PRESET_MONET &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         ) {
-            val ds = dynamicLightColorScheme(context)
+            val ds = if (isDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
             listOf(ds.primary, ds.secondary, ds.tertiary, ds.error)
         } else {
             val presetColors = currentPreset?.colors ?: COLOR_PRESETS[0].colors
@@ -133,6 +140,7 @@ fun ColorPaletteScreen(
                     PresetGrid(
                         selectedPreset = localSetting.colorPalettePreset,
                         hasCustomOverride = hasCustomOverride,
+                        isDarkTheme = isDarkTheme,
                         onSelect = { presetId ->
                             // 切换预设时清空自定义颜色覆盖
                             localSettingManager.updateCustomColor(null, null, null, null)
@@ -220,7 +228,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
@@ -255,13 +263,16 @@ private fun ColorPreviewRow(colors: List<Color>) {
 private fun PresetGrid(
     selectedPreset: String,
     hasCustomOverride: Boolean,
+    isDarkTheme: Boolean,
     onSelect: (String) -> Unit
 ) {
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // 莫奈取色（仅 Android 12+）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val dynamicScheme = remember { dynamicLightColorScheme(context) }
+            val dynamicScheme = remember(context, isDarkTheme) {
+                if (isDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            }
             val monetPreset = ColorPreset(
                 id = COLOR_PALETTE_PRESET_MONET,
                 name = "莫奈取色",

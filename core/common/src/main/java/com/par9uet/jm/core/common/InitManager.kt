@@ -4,4 +4,8 @@ import kotlinx.coroutines.CompletableDeferred
 
 class InitManager {
     val deferred = CompletableDeferred<String>()
+
+    suspend fun awaitReady() {
+        deferred.await()
+    }
 }

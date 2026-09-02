@@ -1,8 +1,6 @@
 package com.par9uet.jm.data.repository.impl
 
 import com.par9uet.jm.core.model.CollectComicOrderFilter
-import com.par9uet.jm.core.model.COMIC_API_SOURCE_BUILTIN
-import com.par9uet.jm.core.model.COMIC_API_SOURCE_MIXED
 import com.par9uet.jm.data.repository.BaseRepository
 import com.par9uet.jm.data.repository.UserRepository
 import com.par9uet.jm.core.common.log
@@ -14,36 +12,24 @@ import com.par9uet.jm.data.network.model.SignInResponse
 import com.par9uet.jm.data.network.model.UserCollectComicListResponse
 import com.par9uet.jm.data.network.model.UserHistoryComicListResponse
 import com.par9uet.jm.data.network.model.UserHistoryCommentListResponse
-import com.par9uet.jm.data.network.service.UserService
-import com.par9uet.jm.data.storage.CookieStorage
 import com.par9uet.jm.core.common.InitManager
-import com.par9uet.jm.data.storage.LocalSettingManager
-import io.github.jukomu.jmcomic.api.enums.ClientType
 import io.github.jukomu.jmcomic.api.model.ForumQuery
 import io.github.jukomu.jmcomic.api.model.FavoriteQuery
 import io.github.jukomu.jmcomic.api.model.JmAlbumMeta
 import io.github.jukomu.jmcomic.api.model.JmCategoryMeta
 import io.github.jukomu.jmcomic.api.model.JmComment
-import io.github.jukomu.jmcomic.api.model.JmCommentList
 import io.github.jukomu.jmcomic.api.model.JmDailyCheckInStatus
 import io.github.jukomu.jmcomic.api.model.JmUserInfo
 import io.github.jukomu.jmcomic.core.client.impl.JmApiClient
-import io.github.jukomu.jmcomic.core.config.JmConfiguration
-import io.github.jukomu.jmcomic.core.net.OkHttpBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import okhttp3.Cookie
-import java.time.Duration
 
 class UserRepositoryImpl(
-    private val service: UserService,
-    private val localSettingManager: LocalSettingManager,
     initManager: InitManager,
-    private val cookieStorage: CookieStorage,
     private val embeddedClientManager: EmbeddedClientManager,
 ) : BaseRepository(initManager), UserRepository {
 
@@ -85,8 +71,7 @@ class UserRepositoryImpl(
     }
 
     override suspend fun login(username: String, password: String): NetWorkResult<LoginResponse> {
-        if (useEmbeddedApi()) {
-            return withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
                 try {
                     val userInfo = withEmbeddedClient { client ->
                         client.login(username, password)
@@ -95,10 +80,6 @@ class UserRepositoryImpl(
                 } catch (e: Exception) {
                     NetWorkResult.Error("内置API登录失败：${e.message ?: "未知错误"}")
                 }
-            }
-        }
-        return safeApiCall {
-            service.login(username, password)
         }
     }
 
@@ -107,8 +88,7 @@ class UserRepositoryImpl(
         order: CollectComicOrderFilter,
         folderId: Int
     ): NetWorkResult<UserCollectComicListResponse> {
-        if (useEmbeddedApi()) {
-            return withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
                 try {
                     val client = embeddedClientManager.getClient()
                     // 内置客户端的 FavoriteQuery 只接受 folderId 与 page，
@@ -142,16 +122,11 @@ class UserRepositoryImpl(
                 } catch (e: Exception) {
                     NetWorkResult.Error("内置API获取收藏列表失败：${e.message ?: "未知错误"}")
                 }
-            }
-        }
-        return safeApiCall {
-            service.getCollectComicList(page, order.value, folderId)
         }
     }
 
     override suspend fun getHistoryComicList(page: Int): NetWorkResult<UserHistoryComicListResponse> {
-        if (useEmbeddedApi()) {
-            return withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
                 try {
                     NetWorkResult.Success(withEmbeddedClient { client ->
                         val albumMetas = client.getWatchHistory(page)
@@ -163,10 +138,6 @@ class UserRepositoryImpl(
                 } catch (e: Exception) {
                     NetWorkResult.Error("内置API获取历史漫画失败：${e.message ?: "未知错误"}")
                 }
-            }
-        }
-        return safeApiCall {
-            service.getHistoryComicList(page)
         }
     }
 
@@ -188,8 +159,7 @@ class UserRepositoryImpl(
         page: Int,
         userId: Int
     ): NetWorkResult<UserHistoryCommentListResponse> {
-        if (useEmbeddedApi()) {
-            return withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
                 try {
                     NetWorkResult.Success(withEmbeddedClient { client ->
                         val query = ForumQuery.user(userId.toString())
@@ -204,16 +174,11 @@ class UserRepositoryImpl(
                 } catch (e: Exception) {
                     NetWorkResult.Error("内置API获取评论历史失败：${e.message ?: "未知错误"}")
                 }
-            }
-        }
-        return safeApiCall {
-            service.getCommentList(page, userId)
         }
     }
 
     override suspend fun getSignData(userId: Int): NetWorkResult<SignInDataResponse> {
-        if (useEmbeddedApi()) {
-            return withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
                 try {
                     NetWorkResult.Success(withEmbeddedClient { client ->
                         val status = client.getDailyCheckInStatus(userId.toString())
@@ -222,16 +187,11 @@ class UserRepositoryImpl(
                 } catch (e: Exception) {
                     NetWorkResult.Error("内置API获取签到数据失败：${e.message ?: "未知错误"}")
                 }
-            }
-        }
-        return safeApiCall {
-            service.getSignInData(userId)
         }
     }
 
     override suspend fun signIn(userId: Int, dailyId: Int): NetWorkResult<SignInResponse> {
-        if (useEmbeddedApi()) {
-            return withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
                 try {
                     withEmbeddedClient { client ->
                         client.doDailyCheckin(userId.toString(), dailyId.toString())
@@ -240,19 +200,10 @@ class UserRepositoryImpl(
                 } catch (e: Exception) {
                     NetWorkResult.Error("内置API签到失败：${e.message ?: "未知错误"}")
                 }
-            }
-        }
-        return safeApiCall {
-            service.signIn(userId, dailyId)
         }
     }
 
-    private fun useEmbeddedApi(): Boolean {
-        val source = localSettingManager.localSettingState.value.comicApiSource
-        return source == COMIC_API_SOURCE_BUILTIN || source == COMIC_API_SOURCE_MIXED
-    }
-
-    private fun <T> withEmbeddedClient(block: (JmApiClient) -> T): T {
+    private suspend fun <T> withEmbeddedClient(block: (JmApiClient) -> T): T {
         return block(embeddedClientManager.getClient())
     }
 
@@ -272,7 +223,7 @@ class UserRepositoryImpl(
             name = name(),
             content = content(),
             photo = photo() ?: "",
-            spoiler = spoiler(),
+            spoiler = if (spoiler()) "1" else "0",
             replys = replys()?.map { it.toHistoryCommentListItem() }
         )
     }

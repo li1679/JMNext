@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.tasks.Copy
 import java.util.Properties
 
 plugins {
@@ -14,31 +15,49 @@ val versionProps = Properties().apply {
 }
 
 val versionCodeProp = versionProps.getProperty("VERSION_CODE", "1").toIntOrNull()
-val versionNameProp: String = versionProps.getProperty("VERSION_NAME", "1.1.0")
-
-fun getGitHash() = providers
-    .exec {
-        commandLine("git", "rev-parse", "--short", "HEAD")
-        isIgnoreExitValue = true
-    }
-    .standardOutput
-    .asText
-    .map {
-        it.trim().ifBlank { "unknown" }
-    }
-    .getOrElse("unknown")
-
+val versionNameProp: String = versionProps.getProperty("VERSION_NAME", "1.1.1")
 
 androidComponents {
     onVariants { variant ->
-        val hash = getGitHash()
-        val fileName = "jmnext_v${versionNameProp}_${hash}.apk"
+        val fileName = "jmnext_v${versionNameProp}_${variant.buildType}.apk"
         variant.outputs.forEach { output ->
             if (output is com.android.build.api.variant.impl.VariantOutputImpl) {
                 output.outputFileName.set(fileName)
             }
         }
     }
+}
+
+// 将两种构建产物同步到桌面统一 APK 目录，目录位置相对项目根目录保持可移植。
+val apkExportDir = rootProject.file("../../JMNext-APK")
+val debugApkName = "jmnext_v${versionNameProp}_debug.apk"
+val releaseApkName = "jmnext_v${versionNameProp}_release.apk"
+
+val exportDebugApk = tasks.register<Copy>("exportDebugApk") {
+    from(layout.buildDirectory.dir("outputs/apk/debug")) {
+        include(debugApkName)
+    }
+    into(apkExportDir)
+}
+val exportReleaseApk = tasks.register<Copy>("exportReleaseApk") {
+    from(layout.buildDirectory.dir("outputs/apk/release")) {
+        include(releaseApkName)
+    }
+    into(apkExportDir)
+}
+
+tasks.configureEach {
+    when (name) {
+        "assembleDebug" -> finalizedBy(exportDebugApk)
+        "assembleRelease" -> finalizedBy(exportReleaseApk)
+    }
+}
+
+// 每次发布更新时统一构建两个可安装版本。
+tasks.register("assembleBoth") {
+    group = "build"
+    description = "Build and export both Debug and Release APKs"
+    dependsOn("assembleDebug", "assembleRelease")
 }
 
 kotlin {
@@ -136,5 +155,6 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     debugImplementation(libs.androidx.ui.tooling)
 }

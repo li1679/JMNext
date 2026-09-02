@@ -4,7 +4,6 @@ import com.par9uet.jm.core.common.AppEnv
 import com.par9uet.jm.data.network.converter.PrimitiveToRequestBodyConverterFactory
 import com.par9uet.jm.data.network.converter.ResponseConverterFactory
 import com.par9uet.jm.data.network.interceptor.BaseUrlInterceptor
-import com.par9uet.jm.data.network.interceptor.InitInterceptor
 import com.par9uet.jm.data.network.interceptor.ToastInterceptor
 import com.par9uet.jm.data.network.interceptor.TokenInterceptor
 import com.par9uet.jm.data.storage.CookieStorage
@@ -25,7 +24,6 @@ class Retrofit(
     baseUrlInterceptor: BaseUrlInterceptor,
     toastInterceptor: ToastInterceptor,
     tokenInterceptor: TokenInterceptor,
-    initInterceptor: InitInterceptor,
     private val scalarsConverterFactory: ScalarsConverterFactory,
     private val responseConverterFactory: ResponseConverterFactory,
     private val primitiveToRequestBodyConverterFactory: PrimitiveToRequestBodyConverterFactory,
@@ -55,20 +53,16 @@ class Retrofit(
     }
     private val okHttpClient =
         OkHttpClient.Builder()
-            // 连接超时压短一些：BaseUrlInterceptor 会逐条试线路，
-            // 单条等太久会让整体等待时间成倍放大
+            // 远端图片域名配置仅用于启动时读取，避免拖慢应用启动
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
-            // 含线路重试的总上限，避免故障转移把一次请求拖到无限久
+            // 远端配置请求的总上限，失败时沿用图片域名兜底值
             .callTimeout(45, TimeUnit.SECONDS)
-            .addInterceptor(initInterceptor)
-            // 放在 baseUrlInterceptor 外层：只对线路重试后的最终结果提示，
-            // 中间每条失败线路不重复打扰用户
+            // 远端图片配置失败时只提示一次
             .addInterceptor(toastInterceptor)
             .addInterceptor(baseUrlInterceptor)
-            // 放在 baseUrlInterceptor 内层：每次换线路重试都会重算签名，
-            // 保证时间戳始终新鲜
+            // 内部配置请求使用统一签名
             .addInterceptor(tokenInterceptor)
             .apply {
                 // HTTP 日志只在 debug 构建挂载：release 下它既是无谓开销，

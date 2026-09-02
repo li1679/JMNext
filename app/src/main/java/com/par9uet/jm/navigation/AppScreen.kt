@@ -36,7 +36,6 @@ import com.par9uet.jm.ui.feature.search.ComicSearchResultScreen
 
 import com.par9uet.jm.ui.feature.home.ComicWeekRecommendScreen
 
-import com.par9uet.jm.ui.feature.detail.ComicRelateListScreen
 
 import com.par9uet.jm.ui.feature.detail.ComicDetailScreen
 
@@ -141,15 +140,6 @@ fun AppScreen(
                 val id = backStackEntry.arguments?.getInt("id") ?: -1
                 val currentChapterId = backStackEntry.arguments?.getInt("currentChapterId") ?: -1
                 ComicChapterScreen(comicId = id, currentChapterId = currentChapterId)
-            }
-            composable(
-                route = "comicRelate/{id}",
-                arguments = listOf(
-                    navArgument(name = "id") { type = NavType.IntType; defaultValue = -1 }
-                ),
-            ) { backStackEntry ->
-                val id = backStackEntry.arguments?.getInt("id") ?: -1
-                ComicRelateListScreen(comicId = id)
             }
             composable(
                 route = "comicRead/{id}",

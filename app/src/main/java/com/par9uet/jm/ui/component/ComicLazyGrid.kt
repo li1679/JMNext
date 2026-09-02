@@ -27,7 +27,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.data.storage.LocalSettingManager
@@ -53,8 +52,8 @@ fun ComicLazyGrid(
     localSettingManager: LocalSettingManager = getKoin().get(),
 ) {
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
-    val visibleList = remember(list, localSetting.blockedTagList) {
-        list.filterBlockedTags(localSetting.blockedTagList)
+    val visibleList = remember(list, localSetting.globalExcludedTags) {
+        list.filterBlockedTags(localSetting.globalExcludedTags)
     }
 
     // layoutInfo 必须只在 derivedStateOf 的 lambda 内部读取。
@@ -127,9 +126,8 @@ fun ComicLazyGrid(
     if (isRefreshing && list.isEmpty()) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                // 禁止点击，让点击穿透
-                .pointerInput(Unit) { },
+                .fillMaxSize(),
+            // 不添加 pointer input，加载遮罩不会拦截底层手势
             contentAlignment = Alignment.Center
         ) {
             CircularProgressIndicator()

@@ -39,7 +39,6 @@ data class UserHistoryComicListResponse (
                 workList = listOf(),
                 isLike = false,
                 isCollect = false,
-                relateComicList = listOf(),
                 comicChapterList = listOf(),
                 price = 0,
                 isBuy = false,

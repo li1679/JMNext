@@ -87,11 +87,15 @@ class ComicReadViewModel(
     private fun getDecodeSemaphore(): Semaphore {
         val target = localSettingManager.localSettingState.value
             .readDecodeConcurrency.coerceIn(1, MAX_DECODE_CONCURRENCY)
-        if (decodeSemaphorePermits != target) {
-            decodeSemaphore = Semaphore(target)
-            decodeSemaphorePermits = target
+        synchronized(decodeJobsLock) {
+            // 正在解码时不要替换信号量，否则旧任务和新任务会各自使用
+            // 一套容量，导致短时间内超过用户设定的并发上限。
+            if (decodeSemaphorePermits != target && decodeJobs.isEmpty()) {
+                decodeSemaphore = Semaphore(target)
+                decodeSemaphorePermits = target
+            }
+            return decodeSemaphore
         }
-        return decodeSemaphore
     }
 
     private fun prefetchCount(): Int =
@@ -170,7 +174,7 @@ class ComicReadViewModel(
         }
     }
 
-    fun getComicPicList(comicId: Int, shunt: String, onSuccess: (() -> Unit)? = null) {
+    fun getComicPicList(comicId: Int, onSuccess: (() -> Unit)? = null) {
         viewModelScope.launch {
             _localChapterList.value = emptyList()
             _comicPicState.update {
@@ -181,7 +185,7 @@ class ComicReadViewModel(
                 )
             }
             releaseAll()
-            when (val data = comicRepository.getComicPicList(comicId, shunt)) {
+            when (val data = comicRepository.getComicPicList(comicId)) {
                 is NetWorkResult.Error -> {
                     _comicPicState.update {
                         it.copy(

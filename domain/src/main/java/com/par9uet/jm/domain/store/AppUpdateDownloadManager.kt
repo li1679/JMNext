@@ -202,6 +202,10 @@ class AppUpdateDownloadManager(
                         }
                     }
                 }
+                if (!file.isApkArchive()) {
+                    file.delete()
+                    error("下载内容不是有效的 APK，请打开发布页重试")
+                }
                 _state.update {
                     it.copy(
                         status = AppUpdateDownloadStatus.Completed,
@@ -253,3 +257,14 @@ data class AppUpdateDownloadRequest(
     val fileName: String,
     val downloadUrl: String
 )
+
+private fun File.isApkArchive(): Boolean {
+    if (length() < 4L) return false
+    return inputStream().use { input ->
+        val signature = ByteArray(4)
+        input.read(signature) == signature.size &&
+            signature[0] == 0x50.toByte() && signature[1] == 0x4B.toByte() &&
+            signature[2] in setOf(0x03.toByte(), 0x05.toByte(), 0x07.toByte()) &&
+            signature[3] in setOf(0x04.toByte(), 0x06.toByte(), 0x08.toByte())
+    }
+}

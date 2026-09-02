@@ -65,7 +65,7 @@ class RemoteSettingManager(
 
     override suspend fun init() {
         log("远程应用设置开始初始化")
-        // 初始化任务串行执行，且未完成前其它请求都阻塞在 InitInterceptor 上，
+        // 初始化任务串行执行，远程设置请求不依赖全局初始化完成，
         // 因此这里必须封顶：线路全部失效时不能让启动一直卡着，
         // 图片域名已有兜底值，拿不到远程设置也不影响继续使用。
         val finished = withTimeoutOrNull(REMOTE_SETTING_TIMEOUT_MS) {

@@ -14,8 +14,12 @@ open class BaseRepository(
     private val initManager: InitManager
 ) {
 
-    suspend fun <T> safeApiCall(apiCall: suspend () -> ResponseWrapper<T>): NetWorkResult<T> {
+    suspend fun <T> safeApiCall(
+        awaitInit: Boolean = true,
+        apiCall: suspend () -> ResponseWrapper<T>,
+    ): NetWorkResult<T> {
         return try {
+            if (awaitInit) initManager.awaitReady()
             val response = apiCall()
             if (response.code == 200) {
                 response.data?.let { NetWorkResult.Success(it) }
@@ -32,8 +36,12 @@ open class BaseRepository(
         }
     }
 
-    suspend fun safeStringCall(apiCall: suspend () -> String): NetWorkResult<String> {
+    suspend fun safeStringCall(
+        awaitInit: Boolean = true,
+        apiCall: suspend () -> String,
+    ): NetWorkResult<String> {
         return try {
+            if (awaitInit) initManager.awaitReady()
             val response = apiCall()
             NetWorkResult.Success(response)
         } catch (e: CancellationException) {
@@ -58,7 +66,7 @@ open class BaseRepository(
                 val errMsg = when (val code = e.code()) {
                     401 -> "账号或密码错误，请重新输入"
                     403 -> "该地区被限制访问，可尝试切换线路或代理"
-                    404 -> "接口线路不可用，请在设置中更换 API 线路"
+                    404 -> "接口暂时不可用，请稍后重试"
                     else -> "网络错误：$code"
                 }
                 NetWorkResult.Error(errMsg)

@@ -39,4 +39,5 @@ dependencies {
         exclude(group = "org.sejda.imageio", module = "webp-imageio")
     }
     implementation(libs.jmcomic.android.support)
+    testImplementation(libs.junit)
 }

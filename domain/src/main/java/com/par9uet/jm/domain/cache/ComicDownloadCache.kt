@@ -39,14 +39,6 @@ fun getComicChapterDownloadDir(context: Context, comic: DownloadComic): File {
     return tryCreateDir(File(getComicDownloadRootDir(context, comic), getChapterCacheName(comic)))
 }
 
-/**
- * 旧版本按「纯章节名」命名的章节目录。
- * 仅用于读取历史下载内容，新的下载一律走 [getChapterCacheName]。
- */
-fun getLegacyComicChapterDownloadDir(context: Context, comic: DownloadComic): File {
-    return File(getComicDownloadRootDir(context, comic), getLegacyChapterCacheName(comic))
-}
-
 fun getComicCoverDownloadFile(context: Context, comic: DownloadComic): File {
     return File(getComicDownloadRootDir(context, comic), COVER_FILE_NAME)
 }
@@ -61,12 +53,7 @@ fun getComicConfigFile(context: Context, comic: DownloadComic): File {
  * 而页面文件名是 0.webp/1.webp…，后写入的章节会覆盖前一章，表现为几章内容掺杂。
  */
 fun getChapterCacheName(comic: DownloadComic): String {
-    return "${getLegacyChapterCacheName(comic)}_${comic.id}"
-}
-
-/** 旧版命名规则，保留用于读取历史下载内容 */
-private fun getLegacyChapterCacheName(comic: DownloadComic): String {
-    return safeCacheFileName(comic.chapterName.ifBlank { "单篇" })
+    return "${safeCacheFileName(comic.chapterName.ifBlank { "单篇" })}_${comic.id}"
 }
 
 fun listComicImageFiles(dir: File): List<File> {

@@ -4,7 +4,6 @@ import android.content.Context
 import coil.ImageLoader
 import coil.disk.DiskCache
 import com.par9uet.jm.domain.cache.getCommonCacheDir
-import com.par9uet.jm.core.common.applyTlsCompat
 import okhttp3.ConnectionSpec
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -26,7 +25,6 @@ fun createAsyncImageLoader(context: Context): ImageLoader {
         .okHttpClient {
             OkHttpClient.Builder()
                 .addInterceptor(cdnHeaderInterceptor)
-                .applyTlsCompat()
                 .build()
         }
         .diskCache {

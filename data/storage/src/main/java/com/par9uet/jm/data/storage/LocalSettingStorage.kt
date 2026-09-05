@@ -1,16 +1,7 @@
 package com.par9uet.jm.data.storage
 
-import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
-import com.par9uet.jm.core.model.APP_LOCK_TYPE_PASSWORD
-import com.par9uet.jm.core.model.APP_LOCK_TYPE_PATTERN
-import com.par9uet.jm.core.model.BlockedTagTemplate
-import com.par9uet.jm.core.model.COLOR_PALETTE_PRESET_DEFAULT
-import com.par9uet.jm.core.model.LauncherDisguise
 import com.par9uet.jm.core.model.LocalSetting
-import com.par9uet.jm.core.common.flattenBlockedTagTemplates
-import com.par9uet.jm.core.common.normalizeBlockedTagList
-import com.par9uet.jm.core.common.normalizeBlockedTagTemplates
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -35,104 +26,10 @@ class LocalSettingStorage(
     fun get(): LocalSetting {
         if (_state.value == null) {
             _state.update {
-                val savedJson = secureStorage.getString(STORAGE_KEY)
-                val saved = secureStorage.get<LocalSetting>(
+                secureStorage.get<LocalSetting>(
                     STORAGE_KEY,
                     object : TypeToken<LocalSetting>() {}.type
                 ) ?: LocalSetting()
-                // 旧版本字段 appLockType 迁移到 appLockUnlockMode
-                val legacyAppLockType = parseLegacyAppLockType(savedJson)
-                val migratedUnlockMode = if (savedJson.hasField("appLockUnlockMode")) {
-                    saved.appLockUnlockMode
-                } else if (legacyAppLockType != null) {
-                    legacyAppLockType
-                } else {
-                    APP_LOCK_TYPE_PASSWORD
-                }
-                val legacyBlockedTags = normalizeBlockedTagList(
-                    runCatching { saved.blockedTagList }.getOrNull() ?: listOf()
-                )
-                val savedTemplates = normalizeBlockedTagTemplates(
-                    runCatching { saved.blockedTagTemplateList }.getOrNull() ?: listOf()
-                )
-                val savedGlobalExcludedTags = normalizeBlockedTagList(
-                    runCatching { saved.globalExcludedTags }.getOrNull() ?: listOf()
-                )
-                val migratedGlobalExcludedTags = if (savedJson.hasField("globalExcludedTags")) {
-                    savedGlobalExcludedTags
-                } else {
-                    // 首页排除是最接近全局语义的旧配置；搜索模板标签不应被静默升级为全局屏蔽。
-                    normalizeBlockedTagList(saved.homeExcludedTags)
-                }
-                val migratedTemplates = if (savedJson.hasField("blockedTagTemplateList")) {
-                    savedTemplates
-                } else if (legacyBlockedTags.isNotEmpty()) {
-                    listOf(BlockedTagTemplate(name = "默认排除", tagList = legacyBlockedTags))
-                } else {
-                    listOf()
-                }
-                saved.copy(
-                    showComicCacheNotification = if (savedJson.hasField("showComicCacheNotification")) {
-                        saved.showComicCacheNotification
-                    } else {
-                        true
-                    },
-                    showComicCacheNotificationName = if (savedJson.hasField("showComicCacheNotificationName")) {
-                        saved.showComicCacheNotificationName
-                    } else {
-                        true
-                    },
-                    launcherDisguise = if (savedJson.hasField("launcherDisguise")) {
-                        LauncherDisguise.fromId(saved.launcherDisguise).id
-                    } else {
-                        LauncherDisguise.Default.id
-                    },
-                    blockedTagList = legacyBlockedTags,
-                    blockedTagTemplateList = migratedTemplates,
-                    globalExcludedTags = migratedGlobalExcludedTags,
-                    homeExcludedTags = migratedGlobalExcludedTags,
-                    appLockPassword = if (savedJson.hasField("appLockPassword")) {
-                        saved.appLockPassword ?: ""
-                    } else {
-                        ""
-                    },
-                    appLockPasswordLength = if (savedJson.hasField("appLockPasswordLength")) {
-                        saved.appLockPasswordLength.coerceIn(4, 8)
-                    } else {
-                        4
-                    },
-                    appLockPattern = if (savedJson.hasField("appLockPattern")) {
-                        saved.appLockPattern ?: ""
-                    } else {
-                        ""
-                    },
-                    appLockUnlockMode = migratedUnlockMode,
-                    colorPalettePreset = if (savedJson.hasField("colorPalettePreset")) {
-                        saved.colorPalettePreset
-                    } else {
-                        COLOR_PALETTE_PRESET_DEFAULT
-                    },
-                    customColorPrimary = if (savedJson.hasField("customColorPrimary")) {
-                        saved.customColorPrimary
-                    } else {
-                        null
-                    },
-                    customColorSecondary = if (savedJson.hasField("customColorSecondary")) {
-                        saved.customColorSecondary
-                    } else {
-                        null
-                    },
-                    customColorTertiary = if (savedJson.hasField("customColorTertiary")) {
-                        saved.customColorTertiary
-                    } else {
-                        null
-                    },
-                    customColorError = if (savedJson.hasField("customColorError")) {
-                        saved.customColorError
-                    } else {
-                        null
-                    }
-                )
             }
         }
         return _state.value ?: LocalSetting()
@@ -144,24 +41,4 @@ class LocalSettingStorage(
         }
         secureStorage.remove(STORAGE_KEY)
     }
-}
-
-private fun String?.hasField(name: String): Boolean {
-    return this?.contains("\"$name\"") == true
-}
-
-/**
- * 解析旧版本存储中的 appLockType 字段（已废弃，迁移到 appLockUnlockMode）
- */
-private fun parseLegacyAppLockType(json: String?): String? {
-    if (json.isNullOrBlank()) return null
-    return runCatching {
-        val obj = JsonParser.parseString(json).asJsonObject
-        if (!obj.has("appLockType")) return null
-        val value = obj.get("appLockType").asString
-        when (value) {
-            APP_LOCK_TYPE_PATTERN -> APP_LOCK_TYPE_PATTERN
-            else -> APP_LOCK_TYPE_PASSWORD
-        }
-    }.getOrNull()
 }

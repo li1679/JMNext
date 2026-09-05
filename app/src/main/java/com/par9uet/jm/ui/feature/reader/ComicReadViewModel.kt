@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import coil.ImageLoader
 import com.par9uet.jm.domain.cache.getComicChapterDownloadDir
 import com.par9uet.jm.domain.cache.getDownloadDir
-import com.par9uet.jm.domain.cache.getLegacyComicChapterDownloadDir
 import com.par9uet.jm.domain.cache.listComicImageFiles
 import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.core.model.ComicChapter
@@ -298,11 +297,6 @@ class ComicReadViewModel(
             val namedDir = getComicChapterDownloadDir(context, downloadComic)
             if (namedDir.exists() && listComicImageFiles(namedDir).isNotEmpty()) {
                 return namedDir
-            }
-            // 回退到旧版「纯章节名」目录，保证升级前下载的内容仍能打开
-            val legacyDir = getLegacyComicChapterDownloadDir(context, downloadComic)
-            if (legacyDir.exists() && listComicImageFiles(legacyDir).isNotEmpty()) {
-                return legacyDir
             }
         }
 

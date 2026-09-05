@@ -16,8 +16,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * 共享的 JmApiClient 实例：login() 写入的登录态与 Cookie 需被所有 Repository 看到，
  * 否则内置 API 模式下 POST（如创建收藏夹）会返回 401。
  *
- * Android 6 兼容：JmDomainManager 域名探活走 ForkJoinPool，在 Android 6 上可能初始化失败
- * 导致 blockUntilInitialized 永久阻塞，故用可取消的挂起等待并设置超时解除。
+ * 域名探活在后台完成；请求侧使用可取消的有限等待，失败时让真实错误返回到界面。
  */
 class EmbeddedClientManager(
     private val cookieStorage: CookieStorage,
@@ -26,8 +25,6 @@ class EmbeddedClientManager(
     private var client: JmApiClient? = null
     @Volatile
     private var isDomainInitialized: (() -> Boolean)? = null
-    @Volatile
-    private var releaseDomainWait: (() -> Unit)? = null
 
     suspend fun getClient(): JmApiClient = withContext(Dispatchers.IO) {
         val current = client ?: synchronized(this@EmbeddedClientManager) {
@@ -48,7 +45,6 @@ class EmbeddedClientManager(
         val context = OkHttpBuilder.build(config)
         val domainManager = context.domainManager
         isDomainInitialized = { domainManager.isInitialized }
-        releaseDomainWait = { domainManager.setInitialized(true) }
         val clientWithCookieInjection = context.client.newBuilder()
             .addInterceptor { chain ->
                 val cookies = cookieStorage.get()
@@ -87,11 +83,7 @@ class EmbeddedClientManager(
         withTimeoutOrNull(DOMAIN_INIT_TIMEOUT_MS) {
             while (!initialized()) delay(DOMAIN_INIT_POLL_MS)
         }
-        if (!initialized()) {
-            // 某些 Android 6 设备上库内探活线程可能永不结束，
-            // 由当前挂起调用释放等待，避免阻塞请求线程。
-            releaseDomainWait?.invoke()
-        }
+        check(initialized()) { "域名初始化失败" }
     }
 
     private companion object {

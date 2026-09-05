@@ -76,8 +76,7 @@ android {
         // 二创自用版的独立包名，与原版互不覆盖、可共存。
         // 注意：改动此值会被系统视为全新应用，登录态与本地数据不与旧包共享。
         applicationId = "com.jmnext.reader"
-        // Android 6.0 Marshmallow is API 23.
-        minSdk = 23
+        minSdk = 26
         targetSdk = 36
         versionCode = versionCodeProp
         versionName = versionNameProp

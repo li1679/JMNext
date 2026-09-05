@@ -1,4 +1,4 @@
-package com.par9uet.jm.ui.state
+package com.par9uet.jm.ui.feature.home
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -9,9 +9,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 
 @Stable
-class TabIndexState(
-    initial: Int = 0
-) {
+class TabIndexState(initial: Int = 0) {
     var value by mutableIntStateOf(initial)
         internal set
 
@@ -22,8 +20,5 @@ class TabIndexState(
 }
 
 @Composable
-fun rememberTabIndexState(initial: Int = 0): TabIndexState {
-    return rememberSaveable(saver = TabIndexState.Saver) {
-        TabIndexState(initial)
-    }
-}
+fun rememberTabIndexState(initial: Int = 0): TabIndexState =
+    rememberSaveable(saver = TabIndexState.Saver) { TabIndexState(initial) }

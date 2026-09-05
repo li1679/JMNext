@@ -83,6 +83,12 @@ fun TabScreen(
                         composable("collect") {
                             LaunchedEffect(isLogin) {
                                 if (!isLogin) {
+                                    // Remove the protected tab before opening login so cancelling
+                                    // login cannot immediately trigger this effect again.
+                                    tabNavController.navigate("home") {
+                                        popUpTo("collect") { inclusive = true }
+                                        launchSingleTop = true
+                                    }
                                     mainNavController.navigate("login")
                                 }
                             }

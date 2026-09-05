@@ -6,7 +6,7 @@ android {
     namespace = "com.par9uet.jm.data.repository"
     compileSdk = 36
     defaultConfig {
-        minSdk = 23
+        minSdk = 26
         consumerProguardFiles("consumer-rules.pro")
     }
     compileOptions {

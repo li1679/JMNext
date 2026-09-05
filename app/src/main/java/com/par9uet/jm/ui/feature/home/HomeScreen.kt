@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -59,7 +60,6 @@ import com.par9uet.jm.ui.component.Comic
 import com.par9uet.jm.ui.component.ComicSkeleton
 import com.par9uet.jm.core.designsystem.component.TabSkeleton
 import com.par9uet.jm.ui.component.adaptiveComicGridCells
-import com.par9uet.jm.ui.state.rememberTabIndexState
 import com.par9uet.jm.ui.feature.home.ComicViewModel
 import com.par9uet.jm.core.common.filterBlockedTags
 import org.koin.compose.getKoin
@@ -177,31 +177,29 @@ fun HomeScreen(
         return
     }
 
+    if (homeComicState.list.isEmpty() && homeComicState.isError) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = homeComicState.errorMsg ?: "加载失败",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Button(onClick = comicViewModel::refreshHomeComic) {
+                Text("重试")
+            }
+        }
+        return
+    }
+
     val selectedTabIndexState = rememberTabIndexState()
     val categories = homeComicState.list
     val allExcludedTags = localSetting.globalExcludedTags
     // 各分类共享同一个横向滚动位置，切页时标签行不会跳回开头
     val chipsScrollState = rememberScrollState()
-
-    val header: @Composable (categoryTitle: String, selectedIndex: Int, onSelect: (Int) -> Unit) -> Unit =
-        { categoryTitle, selectedIndex, onSelect ->
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                HomeHeader(
-                    categoryTitle = categoryTitle,
-                    onSearch = onSearch,
-                    onDownload = onDownload,
-                    onRecommend = onRecommend,
-                    onExtract = onExtract,
-                    onSign = onSign
-                )
-                HomeCategoryChips(
-                    categories = categories.map { it.title },
-                    selectedIndex = selectedIndex,
-                    onSelect = onSelect,
-                    scrollState = chipsScrollState
-                )
-            }
-        }
 
     if (categories.isEmpty()) {
         // 没有任何分类数据时仍要给出搜索入口与空状态，不能只留一片空白
@@ -215,7 +213,12 @@ fun HomeScreen(
                 comicList = emptyList(),
                 isLoading = homeComicState.isLoading,
                 hasExcludedTags = allExcludedTags.isNotEmpty(),
-                header = { header("", 0) {} }
+                header = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        HomeHeader("", onSearch, onDownload, onRecommend, onExtract, onSign)
+                        HomeCategoryChips(emptyList(), 0, {}, chipsScrollState)
+                    }
+                }
             )
         }
         return
@@ -231,32 +234,50 @@ fun HomeScreen(
         selectedTabIndexState.value = pagerState.currentPage
     }
 
-    HorizontalPager(
-        state = pagerState,
-        modifier = Modifier.fillMaxSize(),
-        // 每页保有自己的滚动位置，切分类不会停在上一个列表的偏移量上
-        beyondViewportPageCount = 0
-    ) { page ->
-        val pageData = categories.getOrNull(page)
-        val comicList = remember(pageData, allExcludedTags) {
-            (pageData?.list ?: listOf()).filterBlockedTags(allExcludedTags)
-        }
-        PullToRefreshBox(
-            modifier = Modifier.fillMaxSize(),
-            isRefreshing = homeComicState.isLoading,
-            onRefresh = { comicViewModel.refreshHomeComic() }
+    val selectedPage = categories.getOrNull(pagerState.settledPage)
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            HomeComicGrid(
-                columns = adaptiveComicGridCells(localSetting.homeGridColumns),
-                comicList = comicList,
-                isLoading = homeComicState.isLoading,
-                hasExcludedTags = allExcludedTags.isNotEmpty(),
-                header = {
-                    header(pageData?.title.orEmpty(), page) { index ->
-                        scope.launch { pagerState.animateScrollToPage(index) }
-                    }
-                }
+            HomeHeader(
+                categoryTitle = selectedPage?.title.orEmpty(),
+                onSearch = onSearch,
+                onDownload = onDownload,
+                onRecommend = onRecommend,
+                onExtract = onExtract,
+                onSign = onSign
             )
+            HomeCategoryChips(
+                categories = categories.map { it.title },
+                selectedIndex = pagerState.currentPage,
+                onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
+                scrollState = chipsScrollState
+            )
+        }
+        HorizontalDivider()
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.weight(1f),
+            beyondViewportPageCount = 0
+        ) { page ->
+            val pageData = categories.getOrNull(page)
+            val comicList = remember(pageData, allExcludedTags) {
+                (pageData?.list ?: emptyList()).filterBlockedTags(allExcludedTags)
+            }
+            PullToRefreshBox(
+                modifier = Modifier.fillMaxSize(),
+                isRefreshing = homeComicState.isLoading,
+                onRefresh = { comicViewModel.refreshHomeComic() }
+            ) {
+                HomeComicGrid(
+                    columns = adaptiveComicGridCells(localSetting.homeGridColumns),
+                    comicList = comicList,
+                    isLoading = homeComicState.isLoading,
+                    hasExcludedTags = allExcludedTags.isNotEmpty(),
+                    header = {}
+                )
+            }
         }
     }
 }

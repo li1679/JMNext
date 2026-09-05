@@ -1,6 +1,5 @@
 package com.par9uet.jm.data.storage
 
-import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -14,25 +13,16 @@ import javax.crypto.spec.GCMParameterSpec
 class CryptoManager {
     companion object {
         private const val ENCRYPTED_PREFIX = "enc:"
-        private const val PLAIN_PREFIX = "plain:"
         private const val GCM_IV_SIZE_BYTES = 12
     }
 
     private val keyAlias = "app_master_key"
-    private val keyStore: KeyStore? = runCatching {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
-            return@runCatching null
-        }
-        KeyStore.getInstance("AndroidKeyStore").apply {
-            load(null)
-        }
-    }.getOrNull()
+    private val keyStore: KeyStore = KeyStore.getInstance("AndroidKeyStore").apply {
+        load(null)
+    }
 
     private fun getSecretKey(): SecretKey? {
-        val store = keyStore ?: return null
-        val existingKey = runCatching {
-            store.getEntry(keyAlias, null) as? KeyStore.SecretKeyEntry
-        }.getOrNull()
+        val existingKey = keyStore.getEntry(keyAlias, null) as? KeyStore.SecretKeyEntry
         if (existingKey != null) {
             return existingKey.secretKey
         }
@@ -58,64 +48,27 @@ class CryptoManager {
     }
 
     fun encrypt(data: String): String {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
-            return encodePlain(data)
-        }
-        val encryptedData = runCatching {
-            val key = getSecretKey() ?: return@runCatching null
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, key)
-
-            val encrypted = cipher.doFinal(data.toByteArray(StandardCharsets.UTF_8))
-            ENCRYPTED_PREFIX + Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)
-        }.getOrNull()
-        if (encryptedData != null) {
-            return encryptedData
-        }
-
-        return encodePlain(data)
-    }
-
-    private fun encodePlain(data: String): String {
-        return PLAIN_PREFIX + Base64.encodeToString(
-            data.toByteArray(StandardCharsets.UTF_8),
-            Base64.NO_WRAP
-        )
+        val key = checkNotNull(getSecretKey()) { "无法初始化应用加密密钥" }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+        val encrypted = cipher.doFinal(data.toByteArray(StandardCharsets.UTF_8))
+        return ENCRYPTED_PREFIX + Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)
     }
 
     fun decrypt(encryptedData: String): String? {
-        return when {
-            encryptedData.startsWith(PLAIN_PREFIX) -> decodePlain(
-                encryptedData.removePrefix(PLAIN_PREFIX)
-            )
-
-            encryptedData.startsWith(ENCRYPTED_PREFIX) -> decryptWithKeyStore(
-                encryptedData.removePrefix(ENCRYPTED_PREFIX),
-                ivAtStart = true
-            )
-
-            else -> decryptWithKeyStore(encryptedData, ivAtStart = false)
-                ?: decodePlain(encryptedData)
-        }
+        if (!encryptedData.startsWith(ENCRYPTED_PREFIX)) return null
+        return decryptWithKeyStore(encryptedData.removePrefix(ENCRYPTED_PREFIX))
     }
 
-    private fun decryptWithKeyStore(encryptedData: String, ivAtStart: Boolean): String? {
+    private fun decryptWithKeyStore(encryptedData: String): String? {
         return runCatching {
             val data = Base64.decode(encryptedData, Base64.NO_WRAP)
             if (data.size <= GCM_IV_SIZE_BYTES) {
                 return@runCatching null
             }
 
-            val iv = if (ivAtStart) {
-                data.copyOfRange(0, GCM_IV_SIZE_BYTES)
-            } else {
-                data.copyOfRange(data.size - GCM_IV_SIZE_BYTES, data.size)
-            }
-            val encryptedBytes = if (ivAtStart) {
-                data.copyOfRange(GCM_IV_SIZE_BYTES, data.size)
-            } else {
-                data.copyOfRange(0, data.size - GCM_IV_SIZE_BYTES)
-            }
+            val iv = data.copyOfRange(0, GCM_IV_SIZE_BYTES)
+            val encryptedBytes = data.copyOfRange(GCM_IV_SIZE_BYTES, data.size)
             val key = getSecretKey() ?: return@runCatching null
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             val spec = GCMParameterSpec(128, iv)
@@ -125,9 +78,4 @@ class CryptoManager {
         }.getOrNull()
     }
 
-    private fun decodePlain(data: String): String? {
-        return runCatching {
-            String(Base64.decode(data, Base64.NO_WRAP), StandardCharsets.UTF_8)
-        }.getOrNull()
-    }
 }

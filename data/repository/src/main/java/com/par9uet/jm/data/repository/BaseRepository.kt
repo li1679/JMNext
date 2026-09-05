@@ -36,23 +36,6 @@ open class BaseRepository(
         }
     }
 
-    suspend fun safeStringCall(
-        awaitInit: Boolean = true,
-        apiCall: suspend () -> String,
-    ): NetWorkResult<String> {
-        return try {
-            if (awaitInit) initManager.awaitReady()
-            val response = apiCall()
-            NetWorkResult.Success(response)
-        } catch (e: CancellationException) {
-            // 页面关闭时正在飞行的请求会被取消，属正常流程。
-            // 捕获它会吞掉取消信号，还会把「已取消」记成请求失败。
-            throw e
-        } catch (e: Exception) {
-            handleException(e)
-        }
-    }
-
     private fun handleException(e: Exception): NetWorkResult.Error {
         logError(this::class.java.simpleName, "请求异常: ${e.stackTraceToString()}")
         return when (e) {

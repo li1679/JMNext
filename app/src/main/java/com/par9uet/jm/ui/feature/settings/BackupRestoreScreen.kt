@@ -61,7 +61,6 @@ import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.core.model.ComicChapter
 import com.par9uet.jm.data.database.dao.DownloadComicDao
 import com.par9uet.jm.domain.store.BACKUP_PROTECTION_BOTH
-import com.par9uet.jm.domain.store.BACKUP_PROTECTION_NONE
 import com.par9uet.jm.domain.store.BACKUP_PROTECTION_PASSWORD
 import com.par9uet.jm.domain.store.BACKUP_PROTECTION_PATTERN
 import com.par9uet.jm.domain.store.BackupContentOptions
@@ -93,7 +92,6 @@ private enum class RestoreStep {
 }
 
 private val protectionOptionList = listOf(
-    SelectOption("无保护", BACKUP_PROTECTION_NONE),
     SelectOption("仅密码", BACKUP_PROTECTION_PASSWORD),
     SelectOption("仅图案", BACKUP_PROTECTION_PATTERN),
     SelectOption("密码 + 图案", BACKUP_PROTECTION_BOTH),
@@ -116,7 +114,7 @@ fun BackupRestoreScreen(
 
     var backupStep by remember { mutableStateOf(BackupStep.None) }
     var contentOptions by remember { mutableStateOf(BackupContentOptions()) }
-    var pendingProtectionType by remember { mutableStateOf(BACKUP_PROTECTION_NONE) }
+    var pendingProtectionType by remember { mutableStateOf(BACKUP_PROTECTION_PASSWORD) }
     var pendingPassword by remember { mutableStateOf<String?>(null) }
     var pendingPattern by remember { mutableStateOf<String?>(null) }
     var pendingCreateDocument by remember { mutableStateOf(false) }
@@ -124,6 +122,7 @@ fun BackupRestoreScreen(
     var pendingComicCacheBackup by remember { mutableStateOf<ComicCacheBackup?>(null) }
 
     var restoreBackup by remember { mutableStateOf<BackupFile?>(null) }
+    var verifiedBackupPassword by remember { mutableStateOf<String?>(null) }
     var restoreStep by remember { mutableStateOf(RestoreStep.None) }
     // 恢复时用户选择的内容选项
     var restoreContentOptions by remember { mutableStateOf(BackupContentOptions()) }
@@ -131,10 +130,11 @@ fun BackupRestoreScreen(
     fun resetBackupState() {
         backupStep = BackupStep.None
         contentOptions = BackupContentOptions()
-        pendingProtectionType = BACKUP_PROTECTION_NONE
+        pendingProtectionType = BACKUP_PROTECTION_PASSWORD
         pendingPassword = null
         pendingPattern = null
         pendingComicCacheBackup = null
+        verifiedBackupPassword = null
     }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
@@ -361,10 +361,6 @@ fun BackupRestoreScreen(
                 onSelect = { type ->
                     pendingProtectionType = type
                     when (type) {
-                        BACKUP_PROTECTION_NONE -> {
-                            pendingCreateDocument = true
-                            backupStep = BackupStep.None
-                        }
                         BACKUP_PROTECTION_PASSWORD -> {
                             backupStep = BackupStep.SetPassword
                         }
@@ -419,6 +415,10 @@ fun BackupRestoreScreen(
                     passwordLength = 4,
                     onVerify = { pwd ->
                         if (backupManager.verifyPassword(backup, pwd)) {
+                            verifiedBackupPassword = pwd
+                            if (!backupManager.needsPattern(backup)) {
+                                restoreBackup = backupManager.decryptBackup(backup, password = pwd)
+                            }
                             onPasswordVerified()
                             true
                         } else {
@@ -436,6 +436,11 @@ fun BackupRestoreScreen(
                 VerifyPatternDialog(
                     onVerify = { pattern ->
                         if (backupManager.verifyPattern(backup, pattern)) {
+                            restoreBackup = backupManager.decryptBackup(
+                                backup,
+                                password = verifiedBackupPassword,
+                                pattern = pattern
+                            )
                             onPatternVerified()
                             true
                         } else {

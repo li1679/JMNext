@@ -6,8 +6,14 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import java.util.Base64
 import com.par9uet.jm.core.model.LocalSetting
 import com.par9uet.jm.core.common.logError
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.PBEKeySpec
 import java.security.MessageDigest
 
 const val BACKUP_PROTECTION_NONE = "none"
@@ -15,8 +21,7 @@ const val BACKUP_PROTECTION_PASSWORD = "password"
 const val BACKUP_PROTECTION_PATTERN = "pattern"
 const val BACKUP_PROTECTION_BOTH = "both"
 
-// 备份文件格式版本（v1 旧格式仅 LocalSetting；v2 多内容格式；v3 新增缓存目录备份）
-const val BACKUP_FORMAT_VERSION = 3
+const val BACKUP_FORMAT_VERSION = 1
 
 /** 用户选择要备份的内容类型 */
 data class BackupContentOptions(
@@ -36,6 +41,7 @@ data class BackupMeta(
     val includeLocalSetting: Boolean = true,
     val includeComicCache: Boolean = false,
     val comicCacheCount: Int = 0,
+    val encryptionSalt: String? = null,
 )
 
 /** 缓存目录备份：单章信息，不含图片文件 */
@@ -64,20 +70,16 @@ data class ComicCacheBackup(
 )
 
 /**
- * 备份文件结构：meta + data。
- * v3: data 下分 localSetting / comicCache 两段。
- * v1（兼容旧文件）: data 直接是 LocalSetting 的 JSON。
- *
- * 历史版本可能带有 aiChats / aiPersonas 两段（AI 功能已移除）。
- * 这两段现在既不写入也不读取，但解析时会被静默忽略，
- * 保证老用户的备份文件仍然可以正常恢复其余内容。
+ * 新应用备份文件结构：元数据公开，内容使用密码/图案派生的 AES-GCM 密钥加密。
  */
 data class BackupFile(
     val meta: BackupMeta,
     val data: JsonObject,
+    val encryptedData: String? = null,
 )
 
 class BackupManager {
+    private val random = SecureRandom()
     private val gson: Gson = GsonBuilder()
         .disableHtmlEscaping()
         .setPrettyPrinting()
@@ -95,6 +97,10 @@ class BackupManager {
         pattern: String? = null,
     ): String {
         require(!options.isEmpty) { "至少需要选择一项备份内容" }
+        require(protectionType != BACKUP_PROTECTION_NONE) { "新备份必须设置密码或图案保护" }
+        val secret = listOfNotNull(password, pattern).joinToString("\u0000")
+        require(secret.isNotEmpty()) { "备份保护凭据不能为空" }
+        val salt = ByteArray(16).also(random::nextBytes)
         val meta = BackupMeta(
             version = BACKUP_FORMAT_VERSION,
             timestamp = System.currentTimeMillis(),
@@ -116,6 +122,7 @@ class BackupManager {
             includeLocalSetting = options.includeLocalSetting,
             includeComicCache = options.includeComicCache && comicCache != null,
             comicCacheCount = comicCache?.groups?.size ?: 0,
+            encryptionSalt = Base64.getEncoder().withoutPadding().encodeToString(salt),
         )
 
         val data = JsonObject()
@@ -130,38 +137,63 @@ class BackupManager {
             data.add("comicCache", gson.toJsonTree(comicCache))
         }
 
-        val backup = BackupFile(meta = meta, data = data)
+        val encryptedData = encryptData(gson.toJson(data), secret, salt)
+        val backup = BackupFile(meta = meta, data = JsonObject(), encryptedData = encryptedData)
         return gson.toJson(backup)
     }
 
     /**
-     * 解析备份 JSON 字符串，兼容 v1/v2。
+     * 解析新应用备份元数据；内容在凭据校验后解密。
      */
     fun parseBackup(json: String): Result<BackupFile> = runCatching {
         val obj = JsonParser.parseString(json).asJsonObject
         val meta = gson.fromJson(obj.getAsJsonObject("meta"), BackupMeta::class.java)
             ?: error("备份文件缺少 meta 字段")
-        val data = obj.getAsJsonObject("data") ?: error("备份文件缺少 data 字段")
-        BackupFile(meta = meta, data = data)
+        val encryptedData = obj.get("encryptedData")?.takeUnless { it.isJsonNull }?.asString
+            ?: error("备份文件不是新加密格式")
+        BackupFile(meta = meta, data = JsonObject(), encryptedData = encryptedData)
+    }
+
+    fun decryptBackup(backup: BackupFile, password: String? = null, pattern: String? = null): BackupFile {
+        val encrypted = backup.encryptedData ?: error("备份文件缺少加密数据")
+        val salt = backup.meta.encryptionSalt?.let { Base64.getDecoder().decode(it) }
+            ?: error("备份文件缺少加密参数")
+        val secret = listOfNotNull(password, pattern).joinToString("\u0000")
+        val json = decryptData(encrypted, secret, salt)
+        return backup.copy(data = JsonParser.parseString(json).asJsonObject)
+    }
+
+    private fun deriveKey(secret: String, salt: ByteArray) =
+        SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            .generateSecret(PBEKeySpec(secret.toCharArray(), salt, 120_000, 256))
+            .encoded
+
+    private fun encryptData(data: String, secret: String, salt: ByteArray): String {
+        val iv = ByteArray(12).also(random::nextBytes)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, javax.crypto.spec.SecretKeySpec(deriveKey(secret, salt), "AES"), GCMParameterSpec(128, iv))
+        return Base64.getEncoder().withoutPadding().encodeToString(iv + cipher.doFinal(data.toByteArray(Charsets.UTF_8)))
+    }
+
+    private fun decryptData(value: String, secret: String, salt: ByteArray): String {
+        val bytes = Base64.getDecoder().decode(value)
+        require(bytes.size > 12) { "备份文件加密数据无效" }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, javax.crypto.spec.SecretKeySpec(deriveKey(secret, salt), "AES"), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
+        return cipher.doFinal(bytes.copyOfRange(12, bytes.size)).toString(Charsets.UTF_8)
     }
 
     /**
-     * 从备份中提取 [LocalSetting]，兼容 v1 旧格式。
+     * 从已解密的新应用备份中提取 [LocalSetting]。
      */
     fun extractLocalSetting(backup: BackupFile): LocalSetting? {
-        // v2 格式：data.localSetting
         val obj = backup.data.getAsJsonObject("localSetting")
         if (obj != null) return gson.fromJson(obj, LocalSetting::class.java)
-        // v1 旧格式：data 直接是 LocalSetting
-        if (backup.meta.version <= 1) {
-            return runCatching { gson.fromJson(backup.data, LocalSetting::class.java) }.getOrNull()
-        }
         return null
     }
 
     /**
-     * 从备份中提取缓存目录备份信息。
-     * v1/v2 旧备份无此段，返回空。
+     * 从已解密的新应用备份中提取缓存目录信息。
      */
     fun extractComicCache(backup: BackupFile): ComicCacheBackup {
         val obj = backup.data.getAsJsonObject("comicCache") ?: return ComicCacheBackup()

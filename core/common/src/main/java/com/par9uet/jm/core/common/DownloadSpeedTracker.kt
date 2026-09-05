@@ -50,10 +50,4 @@ object DownloadSpeedTracker {
         _speedByGroup.value = _speedByGroup.value - groupId
     }
 
-    /**
-     * 获取当前速度（bytes/s）
-     */
-    fun getSpeed(groupId: Int): Float {
-        return _speedByGroup.value[groupId] ?: 0f
-    }
 }

@@ -139,12 +139,18 @@ class DownloadComicWorker(
                 .build()
 
             when (val result = picImageLoader.execute(request)) {
-                is ErrorResult -> ""
+                is ErrorResult -> throw IllegalStateException("封面下载失败")
                 is SuccessResult -> {
                     val bitmap = result.drawable.toBitmap()
                     val file = getComicCoverDownloadFile(appContext, downloadTask)
-                    FileOutputStream(file).use { out ->
-                        bitmap.compressWebpCompat(WEBP_QUALITY_COVER, out)
+                    val tempFile = File(file.parentFile, "${file.name}.tmp")
+                    try {
+                        val written = FileOutputStream(tempFile).use { out ->
+                            bitmap.compressWebpCompat(WEBP_QUALITY_COVER, out)
+                        }
+                        check(written && tempFile.renameTo(file)) { "封面文件写入失败" }
+                    } finally {
+                        tempFile.delete()
                     }
                     file.absolutePath
                 }
@@ -222,15 +228,23 @@ class DownloadComicWorker(
             withTimeout(DOWNLOAD_PAGE_TIMEOUT_MS) {
                 imageState.decode(appContext)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw IllegalStateException("第 ${index + 1} 页下载或解码超时", e)
         }
 
         return when (val result = imageState.imageResultState) {
             is ImageResultState.Success -> {
-                FileOutputStream(file).use { out ->
-                    result.decodeImageBitmap.asAndroidBitmap()
-                        .compressWebpCompat(WEBP_QUALITY_DOWNLOAD, out)
+                val tempFile = File(dir, "$index.webp.tmp")
+                try {
+                    val written = FileOutputStream(tempFile).use { out ->
+                        result.decodeImageBitmap.asAndroidBitmap()
+                            .compressWebpCompat(WEBP_QUALITY_DOWNLOAD, out)
+                    }
+                    check(written && tempFile.renameTo(file)) { "第 ${index + 1} 页文件写入失败" }
+                } finally {
+                    tempFile.delete()
                 }
                 DownloadSpeedTracker.addBytes(speedOwnerId, file.length())
                 // 并发下载时若不及时放掉引用，会同时留着 PAGE_CONCURRENCY 张全图

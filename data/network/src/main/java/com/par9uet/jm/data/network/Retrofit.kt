@@ -9,7 +9,6 @@ import com.par9uet.jm.data.network.interceptor.TokenInterceptor
 import com.par9uet.jm.data.storage.CookieStorage
 import com.par9uet.jm.core.common.AppInitTask
 import com.par9uet.jm.core.common.AppTaskInfo
-import com.par9uet.jm.core.common.applyTlsCompat
 import com.par9uet.jm.core.common.log
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -46,7 +45,7 @@ class Retrofit(
         }
 
         override fun loadForRequest(url: HttpUrl): List<Cookie> {
-            cookieList = cookieStorage.get()
+            cookieList = cookieStorage.get().filter { it.matches(url) }
             return cookieList
         }
 
@@ -74,7 +73,6 @@ class Retrofit(
                 }
             }
             .cookieJar(cookieJar)
-            .applyTlsCompat()
             .build()
     private val retrofit: Retrofit by lazy {
         Retrofit.Builder()

@@ -170,16 +170,11 @@ class LocalSettingManager(
     fun updateSearchGridColumns(columns: Int) =
         updateSetting { it.copy(searchGridColumns = columns.coerceIn(0, 6)) }
 
-    fun updateHomeExcludedTags(tags: List<String>) =
-        updateGlobalExcludedTags(tags)
-
     fun updateGlobalExcludedTags(tags: List<String>) {
         val normalized = normalizeBlockedTagList(tags)
         updateSetting {
             it.copy(
                 globalExcludedTags = normalized,
-                // 保持旧备份字段同步，便于旧版本恢复后仍能看到配置。
-                homeExcludedTags = normalized,
             )
         }
     }

@@ -79,6 +79,7 @@ fun App(
         globalViewModel.init()
     }
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
+    val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
     val remoteSetting by remoteSettingManager.remoteSettingState.collectAsStateWithLifecycle()
 
     // 锁定状态：初始为 true（启动即锁定），等待本地设置加载完成后根据 appLockEnabled 决定
@@ -125,12 +126,12 @@ fun App(
         if (settingsLoaded && !localSetting.appLockEnabled) isLocked = false
     }
 
-    // 自动签到：设置加载完成且自动签到开关开启时执行
-    LaunchedEffect(settingsLoaded) {
-        if (!settingsLoaded) return@LaunchedEffect
+    // 自动签到：等待本地设置和登录状态都恢复后执行。
+    // 登录状态通常晚于设置加载，不能因为首次检查时仍为 false 就永久跳过。
+    LaunchedEffect(settingsLoaded, isLogin, localSetting.autoSignInEnabled) {
+        if (!settingsLoaded || !isLogin) return@LaunchedEffect
         val ls = localSettingManager.localSettingState.value
         if (!ls.autoSignInEnabled) return@LaunchedEffect
-        if (!userManager.isLoginState.first()) return@LaunchedEffect
         kotlinx.coroutines.delay(2000L)
         userViewModel.getSignInData()
         val signData = kotlinx.coroutines.withTimeoutOrNull(10000L) {

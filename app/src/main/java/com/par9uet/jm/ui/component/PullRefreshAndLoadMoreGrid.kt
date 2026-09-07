@@ -28,7 +28,7 @@ import androidx.paging.compose.itemKey
 fun <T : Any> PullRefreshAndLoadMoreGrid(
     modifier: Modifier = Modifier,
     lazyPagingItems: LazyPagingItems<T>,
-    key: ((item: T) -> Any),
+    key: ((item: T) -> Any)?,
     columns: GridCells,
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(10.dp, Alignment.Top),
     horizontalArrangement: Arrangement.HorizontalOrVertical = Arrangement.spacedBy(10.dp),
@@ -48,7 +48,7 @@ fun <T : Any> PullRefreshAndLoadMoreGrid(
         ) {
             items(
                 lazyPagingItems.itemCount,
-                key = lazyPagingItems.itemKey { key(it) },
+                key = key?.let { lazyPagingItems.itemKey(it) },
             ) { index ->
                 val item = lazyPagingItems[index]
                 if (item != null && itemVisible(item)) {

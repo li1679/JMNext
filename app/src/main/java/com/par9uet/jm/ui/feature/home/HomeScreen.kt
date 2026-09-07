@@ -87,6 +87,7 @@ private fun HomeSkeleton(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -115,9 +116,7 @@ private fun HomeSkeleton(
         HorizontalDivider()
         FlowRow(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
+                .fillMaxWidth(),
             // 列数与间距必须与真实网格（adaptiveComicGridCells + 12dp）一致，
             // 否则加载完成时布局会整体跳动
             maxItemsInEachRow = columns,
@@ -234,50 +233,45 @@ fun HomeScreen(
         selectedTabIndexState.value = pagerState.currentPage
     }
 
-    val selectedPage = categories.getOrNull(pagerState.settledPage)
-    Column(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            HomeHeader(
-                categoryTitle = selectedPage?.title.orEmpty(),
-                onSearch = onSearch,
-                onDownload = onDownload,
-                onRecommend = onRecommend,
-                onExtract = onExtract,
-                onSign = onSign
-            )
-            HomeCategoryChips(
-                categories = categories.map { it.title },
-                selectedIndex = pagerState.currentPage,
-                onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
-                scrollState = chipsScrollState
-            )
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize(),
+        beyondViewportPageCount = 0
+    ) { page ->
+        val pageData = categories.getOrNull(page)
+        val comicList = remember(pageData, allExcludedTags) {
+            (pageData?.list ?: emptyList()).filterBlockedTags(allExcludedTags)
         }
-        HorizontalDivider()
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.weight(1f),
-            beyondViewportPageCount = 0
-        ) { page ->
-            val pageData = categories.getOrNull(page)
-            val comicList = remember(pageData, allExcludedTags) {
-                (pageData?.list ?: emptyList()).filterBlockedTags(allExcludedTags)
-            }
-            PullToRefreshBox(
-                modifier = Modifier.fillMaxSize(),
-                isRefreshing = homeComicState.isLoading,
-                onRefresh = { comicViewModel.refreshHomeComic() }
-            ) {
-                HomeComicGrid(
-                    columns = adaptiveComicGridCells(localSetting.homeGridColumns),
-                    comicList = comicList,
-                    isLoading = homeComicState.isLoading,
-                    hasExcludedTags = allExcludedTags.isNotEmpty(),
-                    header = {}
-                )
-            }
+        PullToRefreshBox(
+            modifier = Modifier.fillMaxSize(),
+            isRefreshing = homeComicState.isLoading,
+            onRefresh = { comicViewModel.refreshHomeComic() }
+        ) {
+            HomeComicGrid(
+                columns = adaptiveComicGridCells(localSetting.homeGridColumns),
+                comicList = comicList,
+                isLoading = homeComicState.isLoading,
+                hasExcludedTags = allExcludedTags.isNotEmpty(),
+                header = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        HomeHeader(
+                            categoryTitle = pageData?.title.orEmpty(),
+                            onSearch = onSearch,
+                            onDownload = onDownload,
+                            onRecommend = onRecommend,
+                            onExtract = onExtract,
+                            onSign = onSign
+                        )
+                        HomeCategoryChips(
+                            categories = categories.map { it.title },
+                            selectedIndex = pagerState.currentPage,
+                            onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
+                            scrollState = chipsScrollState
+                        )
+                        HorizontalDivider()
+                    }
+                }
+            )
         }
     }
 }

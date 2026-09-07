@@ -126,15 +126,19 @@ fun ComicWeekRecommendScreen(
                 }
                 HorizontalDivider()
             }
-            PullRefreshAndLoadMoreGrid(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                lazyPagingItems = weekRecommendComicPagingItems,
-                key = { it.id },
-                columns = adaptiveComicGridCells(),
-            ) {
-                Comic(it)
+            // A new filter starts at the top. Positional keys keep asynchronously
+            // arriving results from anchoring to a shared comic in the previous issue.
+            key(weekFilterState.categoryId, weekFilterState.typeId) {
+                PullRefreshAndLoadMoreGrid(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    lazyPagingItems = weekRecommendComicPagingItems,
+                    key = null,
+                    columns = adaptiveComicGridCells(),
+                ) {
+                    Comic(it)
+                }
             }
         }
     }

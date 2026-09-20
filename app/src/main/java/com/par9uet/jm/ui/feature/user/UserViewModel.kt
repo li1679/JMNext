@@ -10,6 +10,7 @@ import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.core.model.SignInData
 import com.par9uet.jm.core.model.TagFilterLogic
 import com.par9uet.jm.data.repository.ComicRepository
+import com.par9uet.jm.data.repository.ComicTagFilter
 import com.par9uet.jm.data.repository.UserRepository
 import com.par9uet.jm.data.network.model.LoginResponse
 import com.par9uet.jm.data.network.model.NetWorkResult
@@ -67,6 +68,7 @@ class UserViewModel(
     private val localSettingManager: LocalSettingManager,
     private val comicRepository: ComicRepository,
     private val downloadManager: DownloadManager,
+    private val tagFilter: ComicTagFilter,
 ) : ViewModel() {
 
     /**
@@ -133,8 +135,6 @@ class UserViewModel(
         }
     }
 
-    private val _collectComicOrder = MutableStateFlow(CollectComicOrderFilter.COLLECT_TIME)
-    val collectComicOrder = _collectComicOrder.asStateFlow()
     private val _collectComicFilter = MutableStateFlow(CollectComicLocalFilter())
     val collectComicFilter = _collectComicFilter.asStateFlow()
     private val _collectTagCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
@@ -150,13 +150,12 @@ class UserViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val collectComicPager = combine(
-        _collectComicOrder,
         localSettingManager.localSettingState,
         _collectComicFilter,
         _selectedFolderId,
         currentUserId
-    ) { order, localSetting, filter, folderId, _ ->
-        CollectPagerKey(order, localSetting.globalExcludedTags, filter, folderId)
+    ) { localSetting, filter, folderId, _ ->
+        CollectPagerKey(CollectComicOrderFilter.COLLECT_TIME, localSetting.globalExcludedTags, filter, folderId)
     }.flatMapLatest { key ->
         Pager(
             config = PagingConfig(pageSize = 20, prefetchDistance = 6, initialLoadSize = 20),
@@ -169,18 +168,12 @@ class UserViewModel(
                     key.filter.selectedTags,
                     key.filter.selectedAuthors,
                     key.folderId,
-                    key.filter.tagLogic
+                    key.filter.tagLogic,
+                    tagFilter,
                 )
             }
         ).flow
     }.cachedIn(viewModelScope)
-
-    fun changeCollectComicOrder(order: CollectComicOrderFilter) {
-        _collectComicOrder.update {
-            order
-        }
-        refreshCollectTagCounts()
-    }
 
     fun updateCollectSearchText(value: String) {
         _collectComicFilter.update { it.copy(searchText = value) }
@@ -273,7 +266,7 @@ class UserViewModel(
 
     fun refreshFolderList() {
         viewModelScope.launch {
-            val order = _collectComicOrder.value
+            val order = CollectComicOrderFilter.COLLECT_TIME
             when (val data = userRepository.getCollectComicList(1, order, 0)) {
                 is NetWorkResult.Error -> {
                     // 文件夹列表为可选功能，错误时忽略
@@ -326,7 +319,7 @@ class UserViewModel(
     fun refreshCollectTagCounts() {
         viewModelScope.launch {
             val blockedTagList = localSettingManager.localSettingState.value.globalExcludedTags
-            val order = _collectComicOrder.value
+            val order = CollectComicOrderFilter.COLLECT_TIME
             val folderId = _selectedFolderId.value
             val tagCounts = mutableMapOf<String, Int>()
             val authorCounts = mutableMapOf<String, Int>()
@@ -341,7 +334,12 @@ class UserViewModel(
                     }
 
                     is NetWorkResult.Success -> {
-                        val comics = data.data.toComicList().filterBlockedTags(blockedTagList)
+                        val filtered = tagFilter.filter(data.data.toComicList(), blockedTagList)
+                        if (filtered is NetWorkResult.Error) {
+                            toastManager.showAsync(filtered.message)
+                            return@launch
+                        }
+                        val comics = (filtered as NetWorkResult.Success).data
                         comics.flatMap { it.tagList }.forEach { tag ->
                             tagCounts[tag] = (tagCounts[tag] ?: 0) + 1
                         }
@@ -391,7 +389,8 @@ class UserViewModel(
             pagingSourceFactory = {
                 HistoryComicPagingSource(
                     userRepository,
-                    localSetting.globalExcludedTags
+                    localSetting.globalExcludedTags,
+                    tagFilter,
                 )
             }
         ).flow

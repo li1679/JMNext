@@ -55,7 +55,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.par9uet.jm.core.model.APP_LOCK_TYPE_PASSWORD
 import com.par9uet.jm.core.model.APP_LOCK_TYPE_PATTERN
 import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.core.model.ComicChapter
@@ -88,7 +87,7 @@ private enum class BackupStep {
 }
 
 private enum class RestoreStep {
-    None, VerifyPassword, VerifyPattern, SelectContent, SelectComicCache
+    None, VerifyCredentials, SelectContent, SelectComicCache
 }
 
 private val protectionOptionList = listOf(
@@ -122,7 +121,6 @@ fun BackupRestoreScreen(
     var pendingComicCacheBackup by remember { mutableStateOf<ComicCacheBackup?>(null) }
 
     var restoreBackup by remember { mutableStateOf<BackupFile?>(null) }
-    var verifiedBackupPassword by remember { mutableStateOf<String?>(null) }
     var restoreStep by remember { mutableStateOf(RestoreStep.None) }
     // 恢复时用户选择的内容选项
     var restoreContentOptions by remember { mutableStateOf(BackupContentOptions()) }
@@ -134,7 +132,6 @@ fun BackupRestoreScreen(
         pendingPassword = null
         pendingPattern = null
         pendingComicCacheBackup = null
-        verifiedBackupPassword = null
     }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
@@ -177,6 +174,9 @@ fun BackupRestoreScreen(
     val openDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
+        restoreBackup = null
+        restoreStep = RestoreStep.None
+        restoreContentOptions = BackupContentOptions()
         if (uri == null) {
             toastManager.showAsync("未选择备份文件")
             return@rememberLauncherForActivityResult
@@ -190,28 +190,11 @@ fun BackupRestoreScreen(
                 }
             }.onSuccess { backup ->
                 restoreBackup = backup
-                restoreStep = when {
-                    backupManager.needsPassword(backup) -> RestoreStep.VerifyPassword
-                    backupManager.needsPattern(backup) -> RestoreStep.VerifyPattern
-                    else -> RestoreStep.SelectContent
-                }
+                restoreStep = RestoreStep.VerifyCredentials
             }.onFailure {
                 toastManager.showAsync("恢复失败：${it.message ?: "未知错误"}")
             }
         }
-    }
-
-    fun onPasswordVerified() {
-        val backup = restoreBackup ?: return
-        restoreStep = if (backupManager.needsPattern(backup)) {
-            RestoreStep.VerifyPattern
-        } else {
-            RestoreStep.SelectContent
-        }
-    }
-
-    fun onPatternVerified() {
-        restoreStep = RestoreStep.SelectContent
     }
 
     fun applyRestore(backup: BackupFile, options: BackupContentOptions) {
@@ -378,9 +361,7 @@ fun BackupRestoreScreen(
 
         // 步骤 3a：设置密码
         if (backupStep == BackupStep.SetPassword) {
-            SetAppLockPasswordDialog(
-                lockType = APP_LOCK_TYPE_PASSWORD,
-                passwordLength = 4,
+            SetBackupPasswordDialog(
                 onConfirm = { pwd ->
                     pendingPassword = pwd
                     backupStep = if (pendingProtectionType == BACKUP_PROTECTION_BOTH) {
@@ -408,44 +389,18 @@ fun BackupRestoreScreen(
         }
 
 
-        if (restoreStep == RestoreStep.VerifyPassword) {
+        if (restoreStep == RestoreStep.VerifyCredentials) {
             val backup = restoreBackup
             if (backup != null) {
-                VerifyPasswordDialog(
-                    passwordLength = 4,
-                    onVerify = { pwd ->
-                        if (backupManager.verifyPassword(backup, pwd)) {
-                            verifiedBackupPassword = pwd
-                            if (!backupManager.needsPattern(backup)) {
-                                restoreBackup = backupManager.decryptBackup(backup, password = pwd)
-                            }
-                            onPasswordVerified()
-                            true
-                        } else {
-                            false
+                VerifyBackupDialog(
+                    needsPassword = backupManager.needsPassword(backup),
+                    needsPattern = backupManager.needsPattern(backup),
+                    onVerify = { password, pattern ->
+                        val decrypted = withContext(Dispatchers.Default) {
+                            backupManager.decryptBackup(backup, password, pattern)
                         }
-                    },
-                    onDismiss = { cancelRestore() }
-                )
-            }
-        }
-
-        if (restoreStep == RestoreStep.VerifyPattern) {
-            val backup = restoreBackup
-            if (backup != null) {
-                VerifyPatternDialog(
-                    onVerify = { pattern ->
-                        if (backupManager.verifyPattern(backup, pattern)) {
-                            restoreBackup = backupManager.decryptBackup(
-                                backup,
-                                password = verifiedBackupPassword,
-                                pattern = pattern
-                            )
-                            onPatternVerified()
-                            true
-                        } else {
-                            false
-                        }
+                        restoreBackup = decrypted
+                        restoreStep = RestoreStep.SelectContent
                     },
                     onDismiss = { cancelRestore() }
                 )

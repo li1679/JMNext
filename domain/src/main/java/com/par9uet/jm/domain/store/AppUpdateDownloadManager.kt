@@ -24,6 +24,7 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
 import kotlin.math.roundToInt
 
 enum class AppUpdateDownloadStatus {
@@ -54,10 +55,12 @@ data class AppUpdateDownloadState(
 class AppUpdateDownloadManager(
     private val context: Context,
     private val scope: CoroutineScope,
-    private val toastManager: ToastManager
+    private val toastManager: ToastManager,
+    private val client: OkHttpClient = OkHttpClient(),
 ) {
-    private val client = OkHttpClient()
+    private val taskLock = Any()
     private var job: Job? = null
+    @Volatile
     private var paused = false
 
     /**
@@ -73,18 +76,15 @@ class AppUpdateDownloadManager(
     @Volatile
     private var activeCall: Call? = null
 
-    private var activeRequest: AppUpdateDownloadRequest? = null
-
     private val _state = MutableStateFlow(AppUpdateDownloadState())
     val state = _state.asStateFlow()
 
-    fun start(request: AppUpdateDownloadRequest) {
+    fun start(request: AppUpdateDownloadRequest) = synchronized(taskLock) {
         if (request.downloadUrl.isBlank()) {
             toastManager.showAsync("未找到 APK 下载链接")
             return
         }
         cancelInternal(resetState = false)
-        activeRequest = request
         paused = false
         val myGeneration = generation.incrementAndGet()
         _state.value = AppUpdateDownloadState(
@@ -98,7 +98,7 @@ class AppUpdateDownloadManager(
         }
     }
 
-    fun pause() {
+    fun pause() = synchronized(taskLock) {
         paused = true
         _state.update {
             if (it.status == AppUpdateDownloadStatus.Downloading) {
@@ -109,7 +109,7 @@ class AppUpdateDownloadManager(
         }
     }
 
-    fun resume() {
+    fun resume() = synchronized(taskLock) {
         paused = false
         _state.update {
             if (it.status == AppUpdateDownloadStatus.Paused) {
@@ -120,12 +120,12 @@ class AppUpdateDownloadManager(
         }
     }
 
-    fun cancel() {
+    fun cancel() = synchronized(taskLock) {
         cancelInternal(resetState = true)
         cancelProgressNotification(context, APP_UPDATE_NOTIFICATION_ID)
     }
 
-    fun sendToBackground() {
+    fun sendToBackground() = synchronized(taskLock) {
         _state.update { it.copy(background = true) }
         notifyProgress()
     }
@@ -149,12 +149,16 @@ class AppUpdateDownloadManager(
         myGeneration: Int
     ) = withContext(Dispatchers.IO) {
         fun isCurrent() = generation.get() == myGeneration
-        runCatching {
+        var tempFile: File? = null
+        try {
             val httpRequest = Request.Builder()
                 .url(request.downloadUrl)
                 .header("User-Agent", "jmcomic-next-android")
                 .build()
-            val call = client.newCall(httpRequest).also { activeCall = it }
+            val call = synchronized(taskLock) {
+                if (!isCurrent()) return@withContext
+                client.newCall(httpRequest).also { activeCall = it }
+            }
             call.execute().use { response ->
                 if (!response.isSuccessful) {
                     error("下载失败：HTTP ${response.code}")
@@ -163,18 +167,19 @@ class AppUpdateDownloadManager(
                 val totalBytes = body.contentLength().takeIf { it > 0L } ?: 0L
                 val file = File(getCommonCacheDir(context), "updates/${request.fileName}")
                 file.parentFile?.mkdirs()
+                val partial = File.createTempFile("update-", ".part", file.parentFile)
+                tempFile = partial
                 var downloaded = 0L
                 var windowBytes = 0L
                 var lastTick = System.currentTimeMillis()
                 body.byteStream().use { input ->
-                    FileOutputStream(file).use { output ->
+                    FileOutputStream(partial).use { output ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                         while (true) {
                             while (paused && isCurrent()) {
                                 delay(250)
                             }
                             if (!isCurrent()) {
-                                file.delete()
                                 return@withContext
                             }
                             val read = input.read(buffer)
@@ -185,13 +190,14 @@ class AppUpdateDownloadManager(
                             val now = System.currentTimeMillis()
                             if (now - lastTick >= 500L) {
                                 val speed = (windowBytes * 1000f / (now - lastTick)).roundToInt().toLong()
-                                if (isCurrent()) {
+                                synchronized(taskLock) {
+                                    if (!isCurrent()) return@withContext
                                     _state.update {
                                         it.copy(
                                             downloadedBytes = downloaded,
                                             totalBytes = totalBytes,
                                             speedBytesPerSecond = speed,
-                                            status = AppUpdateDownloadStatus.Downloading
+                                            status = if (paused) AppUpdateDownloadStatus.Paused else AppUpdateDownloadStatus.Downloading
                                         )
                                     }
                                     notifyProgress()
@@ -202,41 +208,52 @@ class AppUpdateDownloadManager(
                         }
                     }
                 }
-                if (!file.isApkArchive()) {
-                    file.delete()
+                if (!partial.isApkArchive()) {
                     error("下载内容不是有效的 APK，请打开发布页重试")
                 }
-                _state.update {
-                    it.copy(
-                        status = AppUpdateDownloadStatus.Completed,
-                        downloadedBytes = downloaded,
-                        totalBytes = totalBytes,
-                        speedBytesPerSecond = 0L,
+                synchronized(taskLock) {
+                    if (!isCurrent()) return@withContext
+                    check(partial.renameTo(file)) { "无法保存 APK 文件" }
+                    _state.update {
+                        it.copy(
+                            status = AppUpdateDownloadStatus.Completed,
+                            downloadedBytes = downloaded,
+                            totalBytes = totalBytes,
+                            speedBytesPerSecond = 0L,
+                            savedPath = file.absolutePath
+                        )
+                    }
+                    cancelProgressNotification(context, APP_UPDATE_NOTIFICATION_ID)
+                    showUpdateDownloadedNotification(
+                        context = context,
+                        version = request.version,
                         savedPath = file.absolutePath
                     )
                 }
-                cancelProgressNotification(context, APP_UPDATE_NOTIFICATION_ID)
-                showUpdateDownloadedNotification(
-                    context = context,
-                    version = request.version,
-                    savedPath = file.absolutePath
-                )
             }
-        }.onFailure { throwable ->
+        } catch (throwable: CancellationException) {
+            throw throwable
+        } catch (throwable: Exception) {
             // 已被取代或取消的任务不得改写状态，否则旧任务的失败会把
             // 刚启动的新任务显示成「下载失败」
-            if (isCurrent()) {
-                _state.update {
-                    it.copy(
-                        status = AppUpdateDownloadStatus.Error,
-                        speedBytesPerSecond = 0L,
-                        errorMessage = throwable.message ?: "下载失败"
-                    )
+            synchronized(taskLock) {
+                if (isCurrent()) {
+                    _state.update {
+                        it.copy(
+                            status = AppUpdateDownloadStatus.Error,
+                            speedBytesPerSecond = 0L,
+                            errorMessage = throwable.message ?: "下载失败"
+                        )
+                    }
+                    cancelProgressNotification(context, APP_UPDATE_NOTIFICATION_ID)
                 }
-                cancelProgressNotification(context, APP_UPDATE_NOTIFICATION_ID)
+            }
+        } finally {
+            tempFile?.delete()
+            synchronized(taskLock) {
+                if (isCurrent()) activeCall = null
             }
         }
-        if (isCurrent()) activeCall = null
     }
 
     private fun notifyProgress() {

@@ -155,5 +155,6 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("io.mockk:mockk:1.13.17")
     debugImplementation(libs.androidx.ui.tooling)
 }

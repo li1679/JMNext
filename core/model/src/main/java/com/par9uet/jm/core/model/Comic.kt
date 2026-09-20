@@ -17,6 +17,7 @@ data class Comic(
     val seriesId: String = "",
     val price: Int,
     val isBuy: Boolean = false,
+    val tagsComplete: Boolean = false,
 ) {
     companion object {
         fun create(

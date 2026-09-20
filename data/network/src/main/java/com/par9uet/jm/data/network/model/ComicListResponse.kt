@@ -6,7 +6,8 @@ data class ComicListResponse(
     val search_query: String,
     val total: String,
     val redirect_aid: String?,
-    val content: List<ContentListItem>
+    val content: List<ContentListItem>,
+    val nextPage: Int? = null,
 ) {
     data class ContentListItem(
         val id: String,

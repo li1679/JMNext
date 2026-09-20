@@ -6,14 +6,13 @@ import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.provider.DocumentsContract
-import com.par9uet.jm.domain.cache.getComicChapterDownloadDir
+import com.par9uet.jm.domain.cache.resolveComicChapterDownloadDir
 import com.par9uet.jm.domain.cache.getDownloadDir
 import com.par9uet.jm.domain.cache.listComicImageFiles
 import com.par9uet.jm.data.database.model.DownloadComic
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
-import kotlin.math.roundToInt
 
 data class CachedComicInfo(
     val imageCount: Int,
@@ -55,7 +54,9 @@ fun exportComicsToMergedPdf(
     treeUri: Uri
 ): List<String> {
     val imageFiles = comics.flatMap { comic ->
-        getComicImageDir(context, comic)?.let(::listComicImageFiles).orEmpty()
+        val files = getComicImageDir(context, comic)?.let(::listComicImageFiles).orEmpty()
+        check(files.isNotEmpty()) { "章节 ${comic.name} 缺少缓存图片" }
+        files
     }
     if (imageFiles.isEmpty()) {
         throw IllegalStateException("未找到可导出的缓存图片")
@@ -93,10 +94,17 @@ private fun writeChunkedPdf(
     imageFiles: List<File>
 ): List<String> {
     val chunks = imageFiles.chunked(PDF_MAX_PAGES_PER_FILE)
-    return chunks.mapIndexed { index, chunk ->
-        val suffix = if (chunks.size == 1) "" else "_${index + 1}"
-        writeImagesToPdf(context, treeUri, safeFileName("$baseName$suffix.pdf"), chunk)
+    val completed = mutableListOf<String>()
+    try {
+        chunks.forEachIndexed { index, chunk ->
+            val suffix = if (chunks.size == 1) "" else "_${index + 1}"
+            completed += writeImagesToPdf(context, treeUri, safeFileName("$baseName$suffix.pdf"), chunk)
+        }
+    } catch (e: Exception) {
+        val partial = if (completed.isEmpty()) "" else "；已完成 ${completed.size} 个分卷"
+        throw IllegalStateException("PDF 导出失败$partial：${e.message}", e)
     }
+    return completed
 }
 
 private const val PDF_MAX_BITMAP_DIMENSION = 2000
@@ -116,41 +124,45 @@ private fun writeImagesToPdf(
         fileName
     ) ?: throw IllegalStateException("无法创建 PDF 文件")
 
-    val failedPages = mutableListOf<Int>()
-    context.contentResolver.openOutputStream(outputUri)?.use { output ->
-        val document = PdfDocument()
-        var pageIndex = 0
-        try {
-            imageFiles.forEachIndexed { index, file ->
-                try {
+    try {
+        context.contentResolver.openOutputStream(outputUri)?.use { output ->
+            val document = PdfDocument()
+            try {
+                imageFiles.forEachIndexed { index, file ->
                     val bitmap = decodeBitmapForPdf(file.absolutePath)
-                        ?: run {
-                            failedPages.add(index + 1)
-                            return@forEachIndexed
+                        ?: throw IllegalStateException("第 ${index + 1} 页图片损坏：${file.name}")
+                    try {
+                        val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, index + 1).create()
+                        val page = document.startPage(pageInfo)
+                        try {
+                            page.canvas.drawBitmap(bitmap, 0f, 0f, null)
+                        } finally {
+                            document.finishPage(page)
                         }
-                    val pageWidth = bitmap.width.coerceAtLeast(1)
-                    val pageHeight = bitmap.height.coerceAtLeast(1)
-                    val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageIndex + 1).create()
-                    val page = document.startPage(pageInfo)
-                    page.canvas.drawBitmap(bitmap, 0f, 0f, null)
-                    document.finishPage(page)
-                    pageIndex++
-                    bitmap.recycle()
-                } catch (e: OutOfMemoryError) {
-                    System.gc()
-                    failedPages.add(index + 1)
-                } catch (e: Exception) {
-                    failedPages.add(index + 1)
+                    } finally {
+                        bitmap.recycle()
+                    }
                 }
+                document.writeTo(output)
+            } finally {
+                document.close()
             }
-            document.writeTo(output)
-        } finally {
-            document.close()
+        } ?: throw IllegalStateException("无法写入 PDF 文件")
+    } catch (e: Exception) {
+        try {
+            DocumentsContract.deleteDocument(context.contentResolver, outputUri)
+        } catch (cleanup: Exception) {
+            e.addSuppressed(cleanup)
         }
-    } ?: throw IllegalStateException("无法写入 PDF 文件")
-
-    if (failedPages.isNotEmpty() && failedPages.size == imageFiles.size) {
-        throw IllegalStateException("所有图片导出失败，可能内存不足或图片损坏")
+        throw e
+    } catch (e: OutOfMemoryError) {
+        val failure = IllegalStateException("PDF 导出失败：内存不足", e)
+        try {
+            DocumentsContract.deleteDocument(context.contentResolver, outputUri)
+        } catch (cleanup: Exception) {
+            failure.addSuppressed(cleanup)
+        }
+        throw failure
     }
 
     return outputUri.toString()
@@ -173,27 +185,19 @@ private fun decodeBitmapForPdf(path: String): Bitmap? {
     return BitmapFactory.decodeFile(path, options)
 }
 
-private fun calculateSampleSize(width: Int, height: Int): Int {
+internal fun calculateSampleSize(width: Int, height: Int): Int {
+    require(width > 0 && height > 0)
     var sampleSize = 1
-    var maxDim = maxOf(width, height)
-    while (maxDim / sampleSize > PDF_MAX_BITMAP_DIMENSION) {
+    val maxDim = maxOf(width, height)
+    while ((maxDim.toLong() + sampleSize - 1) / sampleSize > PDF_MAX_BITMAP_DIMENSION) {
         sampleSize *= 2
-        maxDim /= 2
     }
     return sampleSize
 }
 
 private fun getComicImageDir(context: Context, comic: DownloadComic): File? {
+    resolveComicChapterDownloadDir(context, comic)?.let { return it }
     val directDir = comic.zipPath.takeIf { it.isNotBlank() }?.let(::File)
-    if (directDir?.isDirectory == true && listComicImageFiles(directDir).isNotEmpty()) {
-        return directDir
-    }
-
-    val namedDir = getComicChapterDownloadDir(context, comic)
-    if (namedDir.exists() && listComicImageFiles(namedDir).isNotEmpty()) {
-        return namedDir
-    }
-
     val dir = File(getDownloadDir(context), "${comic.id}")
     if (dir.exists() && listComicImageFiles(dir).isNotEmpty()) {
         return dir

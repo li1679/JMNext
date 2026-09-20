@@ -18,7 +18,7 @@ class CategoryComicPagingSourceTest {
     @Test
     fun emptyFilteredPageStillUsesServerNextPage() = runTest {
         val filter = CategoryFilter("doujin", "chinese", CategoryOrder.MOST_VIEWED)
-        val blockedComic = Comic.create(1, "Blocked item", emptyList()).copy(tagList = listOf("blocked"))
+        val blockedComic = Comic.create(1, "Blocked item", emptyList()).copy(tagList = listOf("blocked"), tagsComplete = true)
         val source = CategoryComicPagingSource(repository { page, query ->
             assertEquals(2, page)
             assertEquals(filter, query)

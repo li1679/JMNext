@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +37,8 @@ fun <T : Any> PullRefreshAndLoadMoreGrid(
     contentPadding: PaddingValues = PaddingValues(10.dp),
     itemVisible: (item: T) -> Boolean = { true },
     enablePullRefresh: Boolean = true,
+    state: LazyGridState = rememberLazyGridState(),
+    header: (@Composable () -> Unit)? = null,
     itemContent: @Composable ((item: T) -> Unit),
 ) {
     val isRefreshing = lazyPagingItems.loadState.refresh is LoadState.Loading
@@ -42,10 +46,30 @@ fun <T : Any> PullRefreshAndLoadMoreGrid(
         LazyVerticalGrid(
             modifier = Modifier.fillMaxSize(),
             columns = columns,
+            state = state,
             verticalArrangement = verticalArrangement,
             horizontalArrangement = horizontalArrangement,
             contentPadding = contentPadding
         ) {
+            if (header != null) {
+                item(key = "grid-header", span = { GridItemSpan(maxLineSpan) }) { header() }
+                if (lazyPagingItems.itemCount == 0 && isRefreshing) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                }
+                val refreshError = lazyPagingItems.loadState.refresh as? LoadState.Error
+                if (refreshError != null) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(refreshError.error.message ?: "加载失败", color = MaterialTheme.colorScheme.error)
+                            Button(onClick = { lazyPagingItems.retry() }) { Text("重试") }
+                        }
+                    }
+                }
+            }
             items(
                 lazyPagingItems.itemCount,
                 key = key?.let { lazyPagingItems.itemKey(it) },

@@ -12,6 +12,8 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.MutableSharedFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -36,6 +38,7 @@ fun TabScreen(
     localSettingManager: LocalSettingManager = getKoin().get()
 ) {
     val tabNavController = rememberNavController()
+    val scrollEvents = remember { MutableSharedFlow<String>(extraBufferCapacity = 1) }
     val mainNavController = LocalMainNavController.current
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -43,6 +46,7 @@ fun TabScreen(
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     CompositionLocalProvider(
         LocalTabNavController provides tabNavController,
+        LocalTabScrollEvents provides scrollEvents,
     ) {
         BoxWithConstraints {
             val useNavigationRail = maxWidth >= 700.dp

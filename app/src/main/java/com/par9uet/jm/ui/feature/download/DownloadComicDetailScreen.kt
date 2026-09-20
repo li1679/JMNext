@@ -356,7 +356,7 @@ fun DownloadComicDetailScreen(
                             CachedInfoItem(
                                 modifier = Modifier.weight(0.5f),
                                 icon = Icons.Default.Speed,
-                                label = "下载速度",
+                                label = "写入速度",
                                 value = formatSpeed(detailState.downloadSpeed)
                             )
                             Text(

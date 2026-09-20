@@ -14,14 +14,14 @@ import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
-import java.security.MessageDigest
+import javax.crypto.AEADBadTagException
 
 const val BACKUP_PROTECTION_NONE = "none"
 const val BACKUP_PROTECTION_PASSWORD = "password"
 const val BACKUP_PROTECTION_PATTERN = "pattern"
 const val BACKUP_PROTECTION_BOTH = "both"
 
-const val BACKUP_FORMAT_VERSION = 1
+const val BACKUP_FORMAT_VERSION = 2
 
 /** 用户选择要备份的内容类型 */
 data class BackupContentOptions(
@@ -36,8 +36,6 @@ data class BackupMeta(
     val version: Int = BACKUP_FORMAT_VERSION,
     val timestamp: Long = System.currentTimeMillis(),
     val protectionType: String = BACKUP_PROTECTION_NONE,
-    val passwordHash: String? = null,
-    val patternHash: String? = null,
     val includeLocalSetting: Boolean = true,
     val includeComicCache: Boolean = false,
     val comicCacheCount: Int = 0,
@@ -98,27 +96,15 @@ class BackupManager {
     ): String {
         require(!options.isEmpty) { "至少需要选择一项备份内容" }
         require(protectionType != BACKUP_PROTECTION_NONE) { "新备份必须设置密码或图案保护" }
-        val secret = listOfNotNull(password, pattern).joinToString("\u0000")
-        require(secret.isNotEmpty()) { "备份保护凭据不能为空" }
+        val secret = protectionSecret(protectionType, password, pattern)
+        if (protectionType != BACKUP_PROTECTION_PATTERN) {
+            require(requireNotNull(password).length >= 8) { "新备份密码至少需要 8 个字符" }
+        }
         val salt = ByteArray(16).also(random::nextBytes)
         val meta = BackupMeta(
             version = BACKUP_FORMAT_VERSION,
             timestamp = System.currentTimeMillis(),
             protectionType = protectionType,
-            passwordHash = when (protectionType) {
-                BACKUP_PROTECTION_PASSWORD, BACKUP_PROTECTION_BOTH -> {
-                    requireNotNull(password) { "password must not be null for protection $protectionType" }
-                    sha256(password)
-                }
-                else -> null
-            },
-            patternHash = when (protectionType) {
-                BACKUP_PROTECTION_PATTERN, BACKUP_PROTECTION_BOTH -> {
-                    requireNotNull(pattern) { "pattern must not be null for protection $protectionType" }
-                    sha256(pattern)
-                }
-                else -> null
-            },
             includeLocalSetting = options.includeLocalSetting,
             includeComicCache = options.includeComicCache && comicCache != null,
             comicCacheCount = comicCache?.groups?.size ?: 0,
@@ -147,20 +133,43 @@ class BackupManager {
      */
     fun parseBackup(json: String): Result<BackupFile> = runCatching {
         val obj = JsonParser.parseString(json).asJsonObject
+        // Version 1 hashes are intentionally ignored: the encrypted payload authenticates credentials.
         val meta = gson.fromJson(obj.getAsJsonObject("meta"), BackupMeta::class.java)
             ?: error("备份文件缺少 meta 字段")
+        require(meta.version in 1..BACKUP_FORMAT_VERSION) { "不支持的备份版本：${meta.version}" }
+        require(meta.protectionType in setOf(BACKUP_PROTECTION_PASSWORD, BACKUP_PROTECTION_PATTERN, BACKUP_PROTECTION_BOTH)) {
+            "备份保护方式无效"
+        }
         val encryptedData = obj.get("encryptedData")?.takeUnless { it.isJsonNull }?.asString
             ?: error("备份文件不是新加密格式")
         BackupFile(meta = meta, data = JsonObject(), encryptedData = encryptedData)
     }
 
     fun decryptBackup(backup: BackupFile, password: String? = null, pattern: String? = null): BackupFile {
+        require(backup.meta.version in 1..BACKUP_FORMAT_VERSION) { "不支持的备份版本：${backup.meta.version}" }
         val encrypted = backup.encryptedData ?: error("备份文件缺少加密数据")
-        val salt = backup.meta.encryptionSalt?.let { Base64.getDecoder().decode(it) }
+        val salt = backup.meta.encryptionSalt?.let { decodeBase64(it) }
             ?: error("备份文件缺少加密参数")
-        val secret = listOfNotNull(password, pattern).joinToString("\u0000")
-        val json = decryptData(encrypted, secret, salt)
+        require(salt.size == 16) { "备份文件加密参数无效" }
+        val secret = protectionSecret(backup.meta.protectionType, password, pattern)
+        val json = try {
+            decryptData(encrypted, secret, salt)
+        } catch (error: AEADBadTagException) {
+            throw IllegalArgumentException("密码或图案错误，或备份文件已损坏", error)
+        }
         return backup.copy(data = JsonParser.parseString(json).asJsonObject)
+    }
+
+    private fun protectionSecret(type: String, password: String?, pattern: String?): String {
+        fun credential(value: String?) = requireNotNull(value?.takeIf { it.isNotEmpty() }) {
+            "备份保护凭据不能为空"
+        }
+        return when (type) {
+            BACKUP_PROTECTION_PASSWORD -> credential(password)
+            BACKUP_PROTECTION_PATTERN -> credential(pattern)
+            BACKUP_PROTECTION_BOTH -> credential(password) + "\u0000" + credential(pattern)
+            else -> error("备份保护方式无效")
+        }
     }
 
     private fun deriveKey(secret: String, salt: ByteArray) =
@@ -176,11 +185,17 @@ class BackupManager {
     }
 
     private fun decryptData(value: String, secret: String, salt: ByteArray): String {
-        val bytes = Base64.getDecoder().decode(value)
-        require(bytes.size > 12) { "备份文件加密数据无效" }
+        val bytes = decodeBase64(value)
+        require(bytes.size >= 28) { "备份文件加密数据无效" }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, javax.crypto.spec.SecretKeySpec(deriveKey(secret, salt), "AES"), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
         return cipher.doFinal(bytes.copyOfRange(12, bytes.size)).toString(Charsets.UTF_8)
+    }
+
+    private fun decodeBase64(value: String): ByteArray = try {
+        Base64.getDecoder().decode(value)
+    } catch (error: IllegalArgumentException) {
+        throw IllegalArgumentException("备份文件加密数据格式无效", error)
     }
 
     /**
@@ -210,19 +225,6 @@ class BackupManager {
     fun needsPattern(backup: BackupFile): Boolean {
         return backup.meta.protectionType == BACKUP_PROTECTION_PATTERN ||
             backup.meta.protectionType == BACKUP_PROTECTION_BOTH
-    }
-
-    /**
-     * 校验密码（用于恢复时的核验）。
-     */
-    fun verifyPassword(backup: BackupFile, password: String): Boolean {
-        val expected = backup.meta.passwordHash ?: return false
-        return constantEquals(expected, sha256(password))
-    }
-
-    fun verifyPattern(backup: BackupFile, pattern: String): Boolean {
-        val expected = backup.meta.patternHash ?: return false
-        return constantEquals(expected, sha256(pattern))
     }
 
     fun readFromUri(context: Context, uri: Uri): String? {
@@ -279,18 +281,4 @@ class BackupManager {
         }
     }
 
-    private fun sha256(input: String): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        val bytes = md.digest(input.toByteArray(Charsets.UTF_8))
-        return bytes.joinToString("") { "%02x".format(it) }
-    }
-
-    private fun constantEquals(a: String, b: String): Boolean {
-        if (a.length != b.length) return false
-        var result = 0
-        for (i in a.indices) {
-            result = result or (a[i].code xor b[i].code)
-        }
-        return result == 0
-    }
 }

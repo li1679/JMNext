@@ -16,6 +16,16 @@ import org.junit.Test
  */
 class ComicDownloadCacheTest {
 
+    @Test
+    fun sameTitlesAndSanitizedTitlesDoNotShareRoots() {
+        assertNotEquals(getComicRootCacheName(chapter(1, "", "a/b")), getComicRootCacheName(chapter(2, "", "a:b")))
+        assertNotEquals(getComicRootCacheName(chapter(1, "", "same")), getComicRootCacheName(chapter(2, "", "same")))
+        assertEquals(
+            getComicRootCacheName(chapter(1, "").copy(groupId = 10, groupName = "book")),
+            getComicRootCacheName(chapter(2, "").copy(groupId = 10, groupName = "book")),
+        )
+    }
+
     private fun chapter(id: Int, chapterName: String, name: String = "某本子") = DownloadComic(
         id = id,
         name = name,

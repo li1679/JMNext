@@ -4,16 +4,20 @@ import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.data.repository.UserRepository
+import com.par9uet.jm.data.repository.ComicTagFilter
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.network.model.UserHistoryComicListResponse
-import com.par9uet.jm.core.common.filterBlockedTags
 
 class HistoryComicPagingSource(
     private val userRepository: UserRepository,
     private val blockedTagList: List<String> = listOf(),
+    private val tagFilter: ComicTagFilter,
 ) : PagingSource<Int, Comic>() {
+    private val loadedIdsByPage = mutableMapOf<Int, Set<Int>>()
+
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Comic> {
         val currentPage = params.key ?: 1
+        if (params is LoadParams.Refresh) loadedIdsByPage.clear()
         return when (val data =
             userRepository.getHistoryComicList(currentPage)) {
             is NetWorkResult.Error -> {
@@ -21,17 +25,17 @@ class HistoryComicPagingSource(
             }
 
             is NetWorkResult.Success<UserHistoryComicListResponse> -> {
-                // 用「本页是否装满」判断结束，不要用 total 推总页数：
-                // 内置数据源拿不到总条目数，返回的是当前页条数，
-                // 据此算出的总页数恒为 1，历史记录会只加载第一页。
-                // 判断必须用过滤前的原始条数，否则屏蔽标签一多就会被误判成末页。
-                val rawSize = data.data.list.size
-                val list = data.data.toComicList().filterBlockedTags(blockedTagList)
-                val isLastPage = rawSize < params.loadSize
+                val loadedIds = loadedIdsByPage.filterKeys { it < currentPage }.values.flatten().toSet()
+                val rawList = data.data.toComicList().distinctBy { it.id }
+                val newItems = rawList.filterNot { it.id in loadedIds }
+                val filtered = tagFilter.filter(newItems, blockedTagList)
+                if (filtered is NetWorkResult.Error) return LoadResult.Error(IllegalStateException(filtered.message))
+                val list = (filtered as NetWorkResult.Success).data
+                loadedIdsByPage[currentPage] = rawList.mapTo(mutableSetOf()) { it.id }
                 LoadResult.Page(
                     data = list,
-                    prevKey = if (currentPage == 1) null else currentPage - 1,
-                    nextKey = if (isLastPage) null else currentPage + 1
+                    prevKey = null,
+                    nextKey = if (newItems.isEmpty()) null else currentPage + 1
                 )
             }
         }

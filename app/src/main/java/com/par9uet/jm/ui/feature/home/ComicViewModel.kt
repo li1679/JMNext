@@ -9,6 +9,7 @@ import com.par9uet.jm.core.model.ComicSearchOrderFilter
 import com.par9uet.jm.core.model.HomeComicSwiperItem
 import com.par9uet.jm.core.model.WeekData
 import com.par9uet.jm.data.repository.ComicRepository
+import com.par9uet.jm.data.repository.ComicTagFilter
 import com.par9uet.jm.data.network.model.HomeSwiperComicListItemResponse
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.network.model.WeekResponse
@@ -19,6 +20,10 @@ import com.par9uet.jm.ui.feature.search.SearchComicPagingSource
 import com.par9uet.jm.ui.feature.home.WeekComicPagingSource
 import com.par9uet.jm.ui.feature.home.WeekFilter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -29,6 +34,7 @@ import kotlinx.coroutines.launch
 class ComicViewModel(
     private val comicRepository: ComicRepository,
     private val localSettingManager: LocalSettingManager,
+    private val tagFilter: ComicTagFilter,
 ) : ViewModel() {
     data class HomeComicUIState(
         val isLoading: Boolean = true,
@@ -42,6 +48,10 @@ class ComicViewModel(
 
     /** 已成功加载过首页数据后避免重复请求 */
     private var homeLoaded = false
+    private var homeJob: Job? = null
+
+    suspend fun filterHomeComics(comics: List<com.par9uet.jm.core.model.Comic>, tags: List<String>) =
+        tagFilter.filter(comics, tags)
 
     /**
      * 按需加载。首页是 Tab 页，导航返回时 NavHost 会重建 composable 并重跑 LaunchedEffect，
@@ -49,7 +59,7 @@ class ComicViewModel(
      * 主动刷新走 [refreshHomeComic]。
      */
     fun ensureHomeComic() {
-        if (homeLoaded && _homeComicState.value.list.isNotEmpty()) return
+        if (homeLoaded || homeJob?.isActive == true) return
         loadHomeComic()
     }
 
@@ -59,7 +69,8 @@ class ComicViewModel(
     }
 
     private fun loadHomeComic() {
-        viewModelScope.launch {
+        if (homeJob?.isActive == true) return
+        homeJob = viewModelScope.launch {
             _homeComicState.update {
                 it.copy(
                     isLoading = true,
@@ -67,22 +78,32 @@ class ComicViewModel(
                     errorMsg = ""
                 )
             }
-            when (val data = comicRepository.getHomeSwiperComicList()) {
-                is NetWorkResult.Error -> {
-                    _homeComicState.update {
-                        it.copy(isError = true, errorMsg = data.message)
+            try {
+                when (val data = comicRepository.getHomeSwiperComicList()) {
+                    is NetWorkResult.Error -> {
+                        _homeComicState.update {
+                            it.copy(isError = true, errorMsg = data.message)
+                        }
                     }
-                }
 
-                is NetWorkResult.Success<List<HomeSwiperComicListItemResponse>> -> {
-                    homeLoaded = true
-                    _homeComicState.update {
-                        it.copy(list = data.data.map { item -> item.toHomeComicSwiperItem() })
+                    is NetWorkResult.Success<List<HomeSwiperComicListItemResponse>> -> {
+                        homeLoaded = true
+                        _homeComicState.update {
+                            val previous = it.list.associateBy { item -> item.id }
+                            it.copy(list = data.data.map { item ->
+                                item.toHomeComicSwiperItem().let { fresh ->
+                                    if (fresh.errorMessage != null) fresh.copy(list = previous[fresh.id]?.list.orEmpty()) else fresh
+                                }
+                            })
+                        }
                     }
                 }
-            }
-            _homeComicState.update {
-                it.copy(isLoading = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _homeComicState.update { it.copy(isError = true, errorMsg = e.message ?: "首页加载失败") }
+            } finally {
+                _homeComicState.update { it.copy(isLoading = false) }
             }
         }
     }
@@ -95,8 +116,8 @@ class ComicViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     val searchComicPager = combine(
         _searchComicFilterState,
-        localSettingManager.localSettingState
-    ) { filter, localSetting -> filter to localSetting.globalExcludedTags }
+        localSettingManager.localSettingState.map { it.globalExcludedTags }.distinctUntilChanged()
+    ) { filter, tags -> filter to tags }
         .flatMapLatest { (filter, blockedTagList) ->
         Pager(
             config = PagingConfig(
@@ -108,6 +129,7 @@ class ComicViewModel(
                 SearchComicPagingSource(
                     comicRepository,
                     filter.copy(excludedTags = (filter.excludedTags + blockedTagList).distinct()),
+                    tagFilter,
                 ) { id ->
                     _searchComicIdState.update {
                         id
@@ -207,9 +229,9 @@ class ComicViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     val weekComicPager = combine(
         _weekFilterState,
-        localSettingManager.localSettingState
-    ) { filter, localSetting ->
-        filter to localSetting.globalExcludedTags
+        localSettingManager.localSettingState.map { it.globalExcludedTags }.distinctUntilChanged()
+    ) { filter, tags ->
+        filter to tags
     }
         .flatMapLatest { (filter, blockedTagList) ->
         Pager(
@@ -222,7 +244,8 @@ class ComicViewModel(
                 WeekComicPagingSource(
                     comicRepository,
                     filter,
-                    blockedTagList
+                    blockedTagList,
+                    tagFilter,
                 )
             }
         ).flow

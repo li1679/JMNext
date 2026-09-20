@@ -1,5 +1,83 @@
 # JMNext 项目审查与待确认修改清单
 
+## 1.1.6 实施记录
+
+版本：1.1.6（versionCode 7）。F01-F13 已实施，下面的审查表保留为问题来源。本次仅交付本地 Release APK，按用户要求不上传 GitHub、不创建发布。
+
+| 修复项 | 本次实现 |
+|---|---|
+| F01 | 首页、分类、搜索、每周、收藏和历史列表共享完整标签核对；4 路请求上限、512 条元数据缓存；单/多标签一致；失败显示错误供重试；规则变化重新判断；搜索续页使用服务端页数。 |
+| F02 | 恢复凭据只存活于当前对话框，密码/图案一次提交，后台解密；错误停留并可重试，取消不遗留密码。 |
+| F03 | 新备份格式 v2 移除快速密码/图案哈希，直接通过 PBKDF2/AES-GCM 验证；新密码至少 8 字符，已有 v1 加密备份仍可恢复。 |
+| F04 | 阅读章节使用统一加载任务和代次，旧响应不能写回，离开时取消；按实际加载章节保存及恢复页码。 |
+| F05 | 首页分分类保留错误，全失败返回真实失败，部分失败保留旧内容；重复刷新合并到正在执行的请求。 |
+| F06 | 共享封面和配置使用组锁、独立临时文件及原子提交。 |
+| F07 | 局部超时进入重试，外部取消继续传播；重试标为 pending，退出始终清理速度采样。 |
+| F08 | 删除下载等待 Worker 停止写入，删除真实章节文件并更新组配置，保留其他章节共享文件；失败不伪报成功。 |
+| F09 | 新下载目录带稳定作品 ID；统一解析保存路径、新目录及旧目录，已有下载仍可读取。 |
+| F10 | PDF 采样仅调整倍数，长边不超过 2,000；损坏页明确失败，清理未完成输出并报告已完成分卷。 |
+| F11 | 更新任务独立临时文件；同一锁协调启动、取消、文件提交、状态及通知，旧任务不能覆盖新任务。 |
+| F12 | 已核对本地上游 1.1.9 接口不支持收藏排序；按后续确认删除两个收藏入口的排序选择及限制说明，直接使用默认顺序，仓库显式拒绝不支持参数。 |
+| F13 | 下载采样按任务同步维护后聚合到组，进度实时读取同组章节，明确标注写入速度。 |
+
+验证：四模块 57 项单元测试通过，覆盖标签缺失/规则变更/请求失败/取消、首页全失败/部分失败/重复刷新、阅读乱序响应、备份新旧格式/错误凭据/损坏数据、下载锁/超时/组速度及 PDF 采样、更新任务竞争和不支持排序。未连接 Android 设备，实际网络、WorkManager、空间释放及界面交互需安装验证。
+
+Release 构建及 R8 压缩成功；Lint 0 错误、38 警告、14 提示。后续修复后的安装包为 `app/build/outputs/apk/release/jmnext_v1.1.6_release.apk`，3,156,552 字节，SHA-256：`9D81B1F48AA2825F96591639C60CA2C48FA9E8FFA48B60A462DAD438796277B8`。包名 `com.jmnext.reader`，versionCode 7，minSdk 26；apksigner 验证通过，证书与本地 1.1.4 Release 一致，沿用既有 debug 签名配置以保持覆盖升级身份，未替换密钥。未提交或推送 Git，未创建 GitHub Release。
+
+## 1.1.6 后续界面与历史修复
+
+- 两个收藏入口删除排序选择及接口限制说明，移除对应可变排序状态。
+- 分类、收藏的筛选区纳入网格首项，随列表滚动；首页标签行为保持原样。
+- 首页、分类、收藏导航支持双击回顶，单击仍切换页面；宽屏侧边导航同步支持。
+- 历史列表按作品 ID 去重，空页或整页无新作品时结束，重试和刷新不会丢记录；不再以客户端 loadSize 推测服务端页大小。
+- 服务端历史接口不暴露保留上限；本地阅读进度无容量上限，本次不裁剪旧记录。
+- 版本仍为 1.1.6 / 7，重新构建覆盖同名本地 APK，不上传。
+- 本次 `:app:testDebugUnitTest :app:lintDebug :app:assembleRelease` 通过，app 18 项测试全部通过（新增历史分页 6 项、双击判定 2 项）。Lint 0 错误、38 警告、14 提示；未连接设备，未进行实机滑动及双击验证。
+
+## 2026-09-20 当前代码复核
+
+本节为本轮修复清单，后面的 2026-09-05 内容保留为历史记录，不应直接当作当前待办。本轮检查 app、domain、core、data 的列表过滤、阅读请求、下载、备份、更新、存储及构建调用链，整理代码职责与优化方向；仅修改本文档，未修改业务源码。并非逐行审计，也不把静态竞态分析称为实机复现。
+
+### 优先修复清单
+
+P1 表示核心功能失效、崩溃或保护机制问题，P2 表示其他明确功能缺陷或有具体触发条件的竞态。位置相对项目根目录，行号对应本轮源码。
+
+| 编号 | 级别 | 问题、触发条件与影响 | 代码证据 | 修复方向及验收 |
+|---|---|---|---|---|
+| F01 | P1 | **全局标签排除未在首页、分类列表隐藏命中作品，进入详情才拦截。** 首页模型三个标签列表均为空；分类转换遗漏原始 tags，只留下分类名称。搜索仅在排除标签超过一个时补查详情，单标签依赖服务端负向查询；多标签详情请求失败仍放行，不能保证完整排除。 | `data/network/src/main/java/com/par9uet/jm/data/network/model/HomeSwiperComicListItemResponse.kt:53`；`data/repository/src/main/java/com/par9uet/jm/data/repository/impl/ComicRepositoryImpl.kt:569`；`app/src/main/java/com/par9uet/jm/ui/feature/category/CategoryComicPagingSource.kt:21`；`app/src/main/java/com/par9uet/jm/ui/feature/search/SearchComicPagingSource.kt:84`、`:122`；`app/src/main/java/com/par9uet/jm/ui/feature/detail/ComicDetailScreen.kt:241` | 建立共享标签解析与过滤流程，区分“无标签”和“标签未知”，保留接口已有标签，不足时限流补查详情并缓存完整元数据；单标签和多标签使用同一语义。校验失败提供可重试状态。验收首页、分类、搜索添加/删除排除标签后即时更新，命中作品不展示；覆盖角色/作品标签、全部被过滤、连续空页、网络失败及规则变更。详情拦截继续作为补充保护。 |
+| F02 | P1 | 恢复备份的解密异常直接从 UI 回调抛出；密文损坏会崩溃。同一页面先验证密码备份，再恢复纯图案备份，还会把上次密码拼入密钥，导致正常文件解密失败。 | `app/src/main/java/com/par9uet/jm/ui/feature/settings/BackupRestoreScreen.kt:125`、`:137`、`:418`、`:439`；`domain/src/main/java/com/par9uet/jm/domain/store/BackupManager.kt:160` | 恢复流程独立管理凭据，开始/取消/完成均清理；按保护类型选择凭据；后台解密并显式展示校验失败。测试连续恢复不同保护类型、取消后重开、正确密码但密文损坏。 |
+| F03 | P1 | 加密备份元数据公开保存无盐 `sha256(password)` / `sha256(pattern)`，允许先廉价猜中凭据，再执行一次 PBKDF2；当前密码固定四位，仅 10,000 种组合。 | `domain/src/main/java/com/par9uet/jm/domain/store/BackupManager.kt:108`、`:118`、`:169`；`app/src/main/java/com/par9uet/jm/ui/feature/settings/BackupRestoreScreen.kt:383` | 去掉快速凭据校验值，通过密码派生及认证解密判断凭据；提升备份密码强度，明确格式版本处理。验证文件不泄露快速校验材料，错误凭据和篡改密文均被拒绝。 |
+| F04 | P1 | 快速切换阅读章节时，每次请求独立启动在 `viewModelScope`，旧请求没有取消或目标判定；旧响应可覆盖新章节图片并执行旧 `onSuccess`，关联错误页码。 | `app/src/main/java/com/par9uet/jm/ui/feature/reader/ComicReadViewModel.kt:176`、`:216`、`:227`；`app/src/main/java/com/par9uet/jm/ui/feature/reader/ComicReadScreen.kt:167` | 章节图片、详情和恢复进度统一绑定当前请求目标；取消旧任务并保护状态提交。用 A 慢、B 快的受控请求验证最终只显示 B；覆盖在线/离线切换及返回。静态确认竞态，未实机复现。 |
+| F05 | P2 | 首页子请求异常全部转换为空列表，即使全部失败仍返回 Success，界面无法显示真实错误。首页刷新同时缺少请求去重或新旧响应控制。 | `data/repository/src/main/java/com/par9uet/jm/data/repository/impl/ComicRepositoryImpl.kt:396`、`:440`；`app/src/main/java/com/par9uet/jm/ui/feature/home/ComicViewModel.kt:61` | 保留分类级失败信息，全失败返回错误，刷新失败保留原内容；合并重复加载并限制旧响应写回。测试全失败、部分失败、快速刷新乱序完成。 |
+| F06 | P2 | 同组多个章节 Worker 写同一个 `cover.webp.tmp`，互相截断、移动或删除临时文件，导致封面损坏或整章重试；组配置也直接并发写入。 | `domain/src/main/java/com/par9uet/jm/domain/worker/DownloadComicWorker.kt:146`；`domain/src/main/java/com/par9uet/jm/domain/cache/ComicDownloadCache.kt:42`、`:93` | 以组为边界协调共享封面与配置写入，使用独立临时文件及受控提交；测试同组两章并行完成和取消其中一章。 |
+| F07 | P2 | 单页 `withTimeout` 的超时属于 CancellationException，被当作用户取消重抛，绕过重试及错误状态，数据库可停留在 downloading。普通异常退避重试分支也未清理速度和记录等待状态。 | `domain/src/main/java/com/par9uet/jm/domain/worker/DownloadComicWorker.kt:111`、`:117`、`:228` | 区分局部超时与外部取消，超时进入重试，用户暂停保持暂停；所有退出路径清理采样。测试超时、断网、取消、达到重试上限的数据库及通知状态。 |
+| F08 | P2 | 下载删除操作只取消任务、删除数据库记录，不删除图片目录，造成磁盘空间未释放且文件脱离列表管理。 | `app/src/main/java/com/par9uet/jm/ui/feature/download/DownloadViewModel.kt:131`、`:149` | 统一删除流程，等待写入停止后删除所选章节文件、更新组配置；保留其他章节仍使用的封面。明确区分“仅移除记录”与“删除下载”，验收实际空间释放及剩余章节可读。 |
+| F09 | P2 | 下载根目录只使用清洗后的标题，同名作品或清洗后同名作品共享封面和配置。 | `domain/src/main/java/com/par9uet/jm/domain/cache/ComicDownloadCache.kt:31`、`:35` | 根目录包含稳定作品 ID；同步调整下载、阅读、导出和恢复路径契约，不静默删除已有文件。测试同名作品、特殊字符标题互不覆盖。 |
+| F10 | P2 | PDF 采样循环同时减半 maxDim、翻倍 sampleSize，提前结束：8,000 像素长边只取样 2 倍，实际仍为 4,000，超过 2,000 上限。部分图片失败时还会静默生成缺页 PDF。 | `domain/src/main/java/com/par9uet/jm/domain/export/PdfExport.kt:176`、`:152` | 保持原始尺寸，仅调整采样倍数；报告失败页或明确导出失败。测试 2,000/8,000/16,000 长边及单页损坏，验证尺寸上限与页数。 |
+| F11 | P2 | 更新 APK 完成分支不检查下载代次；接近完成时取消或重新下载，旧任务仍可写 Completed、发通知。同名任务还复用文件，旧任务清理可能删除新文件。 | `domain/src/main/java/com/par9uet/jm/domain/store/AppUpdateDownloadManager.kt:170`、`:177`、`:205` | 每代独立临时文件，串行协调最终文件提交、状态和通知；测试 EOF 后取消、校验中重启和重复下载同一版本。单独增加一次检查不足以解决检查与提交之间的竞争。 |
+| F12 | P2 | 收藏页仍提供“更新时间”排序，但仓库完全忽略 order，切换选项只会重新请求相同列表。 | `data/repository/src/main/java/com/par9uet/jm/data/repository/impl/UserRepositoryImpl.kt:94`；`app/src/main/java/com/par9uet/jm/ui/feature/user/UserCollectComicScreen.kt:294` | 确认上游能力后实现真实排序，或禁用不支持的选项并明确说明；不能仅排序当前页冒充整个收藏排序。 |
+| F13 | P2 | 下载速度共享普通 Map，字节数和 StateFlow 非原子读改写；多章开始会重置同组采样，一章结束就移除整组。组进度还把其他章节进度当成固定快照。 | `core/common/src/main/java/com/par9uet/jm/core/common/DownloadSpeedTracker.kt:25`、`:36`、`:48`；`domain/src/main/java/com/par9uet/jm/domain/worker/DownloadComicWorker.kt:172`、`:283` | 按任务追踪再聚合到组，原子更新，组状态使用实时数据；明确速度为压缩后落盘字节而非网络流量。验证多章并发、单章完成但其他仍下载、重试和暂停。 |
+
+### 代码整理与优化清单
+
+- O01：优先统一完整标签获取、标签归一化和过滤判定，复用现有收藏详情缓存的思路。当前测试只证明“已经有完整标签时可以过滤”，未覆盖首页标签为空的真实数据转换链；不能靠继续在各页面调用同一个 filter 掩盖输入缺失。
+- O02：`ComicViewModel.kt:96`、`:208` 订阅整个设置对象后直接重建 Pager，修改主题、阅读选项等无关字段也会重建搜索/每周列表。参照 `CategoryViewModel.kt:40`，先提取排除标签并去重，再组合分页条件。
+- O03：`ComicRepositoryImpl.kt:96` 的章节图片元数据缓存只有添加和读取，没有容量限制或释放；改为有界缓存时须保留当前阅读和下载任务仍需要的数据。收藏列表无过滤时也等待逐项详情请求，应将必要过滤与可延后统计分开，避免冷缓存首屏被全部详情请求阻塞。
+- O04：网络异常与协程取消处理方式不统一。分类仓库已使用 CancellationException 单独传播及 runInterruptible，其他调用仍有广泛 catch/runCatching；在受影响调用链统一，保留可诊断失败，避免空列表假成功。
+- O05：阅读和 PDF 各自解析下载目录/归档，下载删除直接操作 DAO；将缓存查找、读取、删除和组配置更新收敛到统一服务，减少格式变化漏改调用点。以 F06/F08/F09 为边界推进，不做全仓无关重构。
+- O06：README 仍写 Android 6.0/API 23，而所有模块已是 minSdk 26，应改为 Android 8.0。`app/build.gradle.kts:96` 的 release 仍使用 debug 签名；正式发布前配置独立发布签名，保留已有用户升级身份约束。APK 导出 `../../JMNext-APK` 仍作为 assemble 的自动副作用，建议改为显式可配置导出任务。
+- O07：处理当前 Lint 的 Modifier 接口、基础类型 State、offset 状态读取、Locale、屏幕尺寸读取等建议；依赖更新提示不直接代表漏洞，不据此批量升级。删除同包重复 import、空 `composeCompiler {}`、失效注释等低风险冗余时按模块编译验证。
+
+### 验证与历史清单校正
+
+- 已重新执行四个模块的单元测试任务，使用 `--rerun`，31 项测试，0 失败、0 错误、0 跳过：`:core:common:testDebugUnitTest :app:testDebugUnitTest :domain:testDebugUnitTest :data:repository:testDebugUnitTest`，参数 `--offline --console=plain --quiet`。测试任务完成；工具另提示 SDK XML 版本不一致，应整理本地 Android SDK 工具版本。
+- `:app:lintDebug --offline --console=plain --quiet` 完成，0 错误、38 警告、14 提示。报告：`app/build/reports/lint-results-debug.html`。测试通过不表示上述缺陷已被覆盖，尤其搜索现有用例只覆盖多排除标签，分类用例直接构造了完整 tagList。
+- `adb devices -l` 无连接设备。本轮未做设备运行、截图、交互与性能验证，也未执行 release 打包或外部服务写操作。F04/F06/F11 等竞态需受控测试及设备验证。
+- 旧清单中“尚未确定最低版本”已不适用，当前统一 API 26；首页已有错误展示，当前缺口在仓库吞掉异常；页面下载已有临时文件提交，不能继续写成直接写最终图片；备份已有 AES-GCM 加密，当前应修复 F02/F03，不能继续写成明文备份。其余历史条目不能未经复核直接宣布已修复或仍未修复。
+- 推荐实施顺序：F01 标签排除完整链路；F02/F03 备份恢复与保护；F04 阅读请求；F06-F11 下载与文件一致性；F05/F12/F13 状态与功能；最后落实代码整理和文档修正。每批附相应回归测试。
+
+## 2026-09-05 历史审查记录
+
 日期：2026-09-05。阶段：首轮整改已实施，后续 UI 深度细化仍按覆盖表推进。
 
 本版范围已按用户最新要求调整：只考虑新应用，不做旧 Android 系统适配，也不做旧备份、旧设置、旧数据库、旧下载目录的数据迁移。下列删除均为待实施方案，本轮未删除文件、清空数据或修改应用身份。最低 Android 版本尚未指定，应在实现前确定具体基线；不默认把“新应用”解释为仅支持某一个最新版本。

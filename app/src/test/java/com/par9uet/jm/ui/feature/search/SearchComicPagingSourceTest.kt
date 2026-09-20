@@ -25,6 +25,15 @@ import org.junit.Test
 
 class SearchComicPagingSourceTest {
     @Test
+    fun filtersSingleExcludedTagUsingDetailsAndKeepsServerPagination() = runTest {
+        val repository = FakeComicRepository()
+        val source = SearchComicPagingSource(repository, SearchComicFilter(excludedTags = listOf("a")))
+        val result = source.load(PagingSource.LoadParams.Refresh(null, 60, false)) as PagingSource.LoadResult.Page
+        assertEquals(listOf(2), result.data.map { it.id })
+        assertEquals(2, result.nextKey)
+    }
+
+    @Test
     fun filtersMultipleExcludedTagsByDetail() = runTest {
         val repository = FakeComicRepository()
         val source = SearchComicPagingSource(
@@ -64,6 +73,7 @@ class SearchComicPagingSourceTest {
                     search_query = searchContent,
                     total = "2",
                     redirect_aid = null,
+                    nextPage = 2,
                     content = listOf(
                         contentItem(id = 1),
                         contentItem(id = 2)

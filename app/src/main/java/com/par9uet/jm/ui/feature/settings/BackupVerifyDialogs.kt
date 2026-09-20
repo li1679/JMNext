@@ -1,145 +1,121 @@
 package com.par9uet.jm.ui.feature.settings
 
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
-/** 恢复备份前的密码 / 图案校验对话框。 */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun VerifyPasswordDialog(
-    passwordLength: Int,
-    onVerify: (String) -> Boolean,
-    onDismiss: () -> Unit,
-) {
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    BasicAlertDialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.widthIn(max = 400.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ),
-            shape = MaterialTheme.shapes.extraLarge
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "请输入备份密码",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                errorMessage?.let {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                PasswordLockInput(
-                    title = "",
-                    correctPassword = null,
-                    onUnlock = {},
-                    passwordLength = passwordLength,
-                    onInputComplete = { pwd ->
-                        if (!onVerify(pwd)) {
-                            errorMessage = "密码错误，请重试"
-                        } else {
-                            errorMessage = null
-                        }
-                    }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                TextButton(onClick = onDismiss) {
-                    Text("取消")
-                }
+internal fun SetBackupPasswordDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    var password by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("设置备份密码") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                BackupPasswordField(password, { password = it }, "密码（至少 8 个字符）")
+                BackupPasswordField(confirmation, { confirmation = it }, "再次输入密码")
             }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(password) }, enabled = password.length >= 8 && password == confirmation) {
+                Text("确定")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun VerifyPatternDialog(
-    onVerify: (String) -> Boolean,
-    onDismiss: () -> Unit,
-) {
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    BasicAlertDialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.widthIn(max = 400.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ),
-            shape = MaterialTheme.shapes.extraLarge
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "请绘制备份图案",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                errorMessage?.let {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                PatternLockInput(
-                    title = "",
-                    correctPassword = null,
-                    onUnlock = {},
-                    onInputComplete = { pattern ->
-                        if (!onVerify(pattern)) {
-                            errorMessage = "图案错误，请重试"
-                        } else {
-                            errorMessage = null
-                        }
-                    }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                TextButton(onClick = onDismiss) {
-                    Text("取消")
-                }
-            }
-        }
-    }
+private fun BackupPasswordField(value: String, onChange: (String) -> Unit, label: String, enabled: Boolean = true) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        enabled = enabled,
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+    )
 }
 
+/** 凭据仅存活于当前对话框，AES-GCM 认证成功后才进入恢复内容选择。 */
+@Composable
+internal fun VerifyBackupDialog(
+    needsPassword: Boolean,
+    needsPattern: Boolean,
+    onVerify: suspend (String?, String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var password by remember { mutableStateOf("") }
+    var pattern by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("验证备份") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (needsPassword) BackupPasswordField(password, { password = it }, "备份密码", !busy)
+                if (needsPattern && !busy) {
+                    PatternLockInput(
+                        title = "请绘制备份图案",
+                        correctPassword = null,
+                        onUnlock = {},
+                        onInputComplete = { pattern = it },
+                    )
+                    if (pattern != null) Text("图案已输入")
+                }
+                if (busy) CircularProgressIndicator()
+                errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy && (!needsPassword || password.isNotEmpty()) && (!needsPattern || pattern != null),
+                onClick = {
+                    busy = true
+                    errorMessage = null
+                    scope.launch {
+                        try {
+                            onVerify(password.takeIf { needsPassword }, pattern.takeIf { needsPattern })
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            errorMessage = error.message ?: "备份验证失败"
+                        } finally {
+                            busy = false
+                        }
+                    }
+                },
+            ) { Text("验证") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("取消") } },
+    )
+}

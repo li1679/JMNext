@@ -15,6 +15,9 @@ import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalViewConfiguration
+import android.os.SystemClock
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -61,8 +64,25 @@ private fun NavHostController.switchTab(route: String) {
 }
 
 @Composable
+private fun rememberTabClick(navController: NavHostController): (String) -> Unit {
+    val events = LocalTabScrollEvents.current
+    val timeout = LocalViewConfiguration.current.doubleTapTimeoutMillis
+    return remember(navController, events, timeout) {
+        val tracker = TabDoubleTapTracker(timeout)
+        val onClick: (String) -> Unit = { route ->
+            if (tracker.click(route, SystemClock.uptimeMillis())) {
+                events?.tryEmit(route)
+            }
+            if (navController.currentDestination?.route != route) navController.switchTab(route)
+        }
+        onClick
+    }
+}
+
+@Composable
 fun BottomNavigationBarComponent() {
     val tabNavController = LocalTabNavController.current
+    val onTabClick = rememberTabClick(tabNavController)
     val currentRoute = currentTabRoute(tabNavController)
 
     val itemColors = NavigationBarItemDefaults.colors(
@@ -84,11 +104,7 @@ fun BottomNavigationBarComponent() {
                     icon = { destination.TabIcon() },
                     label = { Text(destination.label) },
                     selected = currentRoute == destination.route,
-                    onClick = {
-                        if (currentRoute != destination.route) {
-                            tabNavController.switchTab(destination.route)
-                        }
-                    }
+                    onClick = { onTabClick(destination.route) }
                 )
             }
         }
@@ -98,6 +114,7 @@ fun BottomNavigationBarComponent() {
 @Composable
 fun NavigationRailComponent() {
     val tabNavController = LocalTabNavController.current
+    val onTabClick = rememberTabClick(tabNavController)
     val currentRoute = currentTabRoute(tabNavController)
 
     val itemColors = NavigationRailItemDefaults.colors(
@@ -117,11 +134,7 @@ fun NavigationRailComponent() {
                 icon = { destination.TabIcon() },
                 label = { Text(destination.label) },
                 selected = currentRoute == destination.route,
-                onClick = {
-                    if (currentRoute != destination.route) {
-                        tabNavController.switchTab(destination.route)
-                    }
-                }
+                onClick = { onTabClick(destination.route) }
             )
         }
     }

@@ -5,6 +5,8 @@ import com.google.gson.Gson
 import com.par9uet.jm.data.database.model.DownloadComic
 import com.par9uet.jm.core.common.tryCreateDir
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 private const val CONFIG_FILE_NAME = "config.json"
 private const val COVER_FILE_NAME = "cover.webp"
@@ -28,12 +30,22 @@ data class DownloadComicCacheChapter(
 )
 
 fun getComicDownloadRootDir(context: Context, comic: DownloadComic): File {
-    return getComicDownloadRootDir(context, comic.groupName.ifBlank { comic.name })
+    return tryCreateDir(File(getDownloadDir(context), getComicRootCacheName(comic)))
 }
 
-fun getComicDownloadRootDir(context: Context, comicName: String): File {
-    return tryCreateDir(File(getDownloadDir(context), safeCacheFileName(comicName)))
-}
+fun getComicRootCacheName(comic: DownloadComic): String =
+    "${comic.groupId.takeIf { it != 0 } ?: comic.id}_${safeCacheFileName(comic.groupName.ifBlank { comic.name })}"
+
+fun comicChapterDownloadCandidates(context: Context, comic: DownloadComic): List<File> =
+    listOfNotNull(
+        comic.zipPath.takeIf { it.isNotBlank() }?.let(::File),
+        File(File(getDownloadDir(context), getComicRootCacheName(comic)), getChapterCacheName(comic)),
+        File(File(getDownloadDir(context), safeCacheFileName(comic.groupName.ifBlank { comic.name })), getChapterCacheName(comic)),
+    ).distinctBy { it.absolutePath }
+
+fun resolveComicChapterDownloadDir(context: Context, comic: DownloadComic): File? =
+    comicChapterDownloadCandidates(context, comic)
+        .firstOrNull { it.isDirectory && listComicImageFiles(it).isNotEmpty() }
 
 fun getComicChapterDownloadDir(context: Context, comic: DownloadComic): File {
     return tryCreateDir(File(getComicDownloadRootDir(context, comic), getChapterCacheName(comic)))
@@ -87,10 +99,18 @@ fun writeComicCacheConfig(
         authors = comic.authorList,
         tags = comic.tagList,
         cachePath = rootDir.absolutePath,
-        coverPath = getComicCoverDownloadFile(context, comic).absolutePath,
+        coverPath = comic.coverPath.takeIf { it.isNotBlank() && File(it).isFile }
+            ?: getComicCoverDownloadFile(context, comic).absolutePath,
         chapters = chapterConfigs,
     )
-    getComicConfigFile(context, comic).writeText(gson.toJson(config), Charsets.UTF_8)
+    val target = getComicConfigFile(context, comic)
+    val temp = File.createTempFile("config-", ".tmp", rootDir)
+    try {
+        temp.writeText(gson.toJson(config), Charsets.UTF_8)
+        Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    } finally {
+        temp.delete()
+    }
 }
 
 fun safeCacheFileName(name: String): String {

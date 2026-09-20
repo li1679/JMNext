@@ -5,49 +5,59 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * 下载速度跟踪器，按 groupId 跟踪下载速度。
- * Worker 在每页下载完成后更新字节数，UI 通过 StateFlow 观察实时速度。
+ * 按任务采样并聚合到组；速度为压缩后落盘字节，不是网络流量。
  */
 object DownloadSpeedTracker {
     private data class SpeedSample(
+        val groupId: Int,
         val totalBytes: Long,
-        val startTimeMs: Long,
+        val startedAtNanos: Long,
     )
 
     private val _speedByGroup = MutableStateFlow<Map<Int, Float>>(emptyMap())
     val speedByGroup: StateFlow<Map<Int, Float>> = _speedByGroup.asStateFlow()
 
-    private val samplesByGroup = mutableMapOf<Int, SpeedSample>()
+    private val samplesByTask = mutableMapOf<Int, SpeedSample>()
 
     /**
      * 开始跟踪一个下载任务的速度
      */
-    fun startTracking(groupId: Int) {
-        samplesByGroup[groupId] = SpeedSample(
+    @Synchronized
+    fun startTracking(taskId: Int, groupId: Int) {
+        samplesByTask[taskId] = SpeedSample(
+            groupId = groupId,
             totalBytes = 0L,
-            startTimeMs = System.currentTimeMillis()
+            startedAtNanos = System.nanoTime()
         )
-        _speedByGroup.value = _speedByGroup.value + (groupId to 0f)
+        publish()
     }
 
     /**
      * 增加已下载字节数，并更新速度（bytes/s）
      */
-    fun addBytes(groupId: Int, bytes: Long) {
-        val sample = samplesByGroup[groupId] ?: return
+    @Synchronized
+    fun addBytes(taskId: Int, bytes: Long) {
+        require(bytes >= 0)
+        val sample = samplesByTask[taskId] ?: return
         val newTotal = sample.totalBytes + bytes
-        val elapsedSec = (System.currentTimeMillis() - sample.startTimeMs) / 1000.0
-        val speed = if (elapsedSec > 0) (newTotal / elapsedSec).toFloat() else 0f
-        samplesByGroup[groupId] = sample.copy(totalBytes = newTotal)
-        _speedByGroup.value = _speedByGroup.value + (groupId to speed)
+        samplesByTask[taskId] = sample.copy(totalBytes = newTotal)
+        publish()
     }
 
     /**
      * 停止跟踪，移除速度数据
      */
-    fun stopTracking(groupId: Int) {
-        samplesByGroup.remove(groupId)
-        _speedByGroup.value = _speedByGroup.value - groupId
+    @Synchronized
+    fun stopTracking(taskId: Int) {
+        samplesByTask.remove(taskId)
+        publish()
+    }
+
+    private fun publish() {
+        val now = System.nanoTime()
+        _speedByGroup.value = samplesByTask.values.groupBy { it.groupId }.mapValues { (_, tasks) ->
+            tasks.sumOf { it.totalBytes / ((now - it.startedAtNanos).coerceAtLeast(1) / 1_000_000_000.0) }.toFloat()
+        }
     }
 
 }

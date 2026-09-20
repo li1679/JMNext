@@ -88,6 +88,9 @@ class UserRepositoryImpl(
         order: CollectComicOrderFilter,
         folderId: Int
     ): NetWorkResult<UserCollectComicListResponse> {
+        if (order != CollectComicOrderFilter.COLLECT_TIME) {
+            return NetWorkResult.Error("当前收藏接口不支持按更新时间排序")
+        }
         return withContext(Dispatchers.IO) {
                 try {
                     val client = embeddedClientManager.getClient()

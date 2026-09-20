@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -20,6 +19,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import com.par9uet.jm.ui.feature.home.OnTabScrollToTop
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -44,7 +45,8 @@ fun CategoryScreen(
     val localSetting by settings.localSettingState.collectAsStateWithLifecycle()
     val comics = viewModel.comics.collectAsLazyPagingItems()
 
-    Column(Modifier.fillMaxSize()) {
+    val header: @Composable () -> Unit = {
+      Column {
         when {
             directory.loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
             directory.error != null -> CategoryMessage(directory.error!!, viewModel::loadDirectory)
@@ -74,27 +76,25 @@ fun CategoryScreen(
             onSelect = { viewModel.selectOrder(CategoryOrder.valueOf(it)) },
         )
         HorizontalDivider()
+      }
+    }
+    Column(Modifier.fillMaxSize()) {
         val refresh = comics.loadState.refresh
         Box(Modifier.weight(1f).fillMaxWidth()) {
             // A new filter has its own scroll state; returning to this tab retains the current one.
             key(filter) {
+                val gridState = rememberLazyGridState()
+                OnTabScrollToTop("category") { gridState.animateScrollToItem(0) }
                 PullRefreshAndLoadMoreGrid(
+                    state = gridState,
+                    header = header,
                     lazyPagingItems = comics,
                     key = { it.id },
                     columns = adaptiveComicGridCells(localSetting.searchGridColumns),
                     modifier = Modifier.fillMaxSize(),
                 ) { Comic(it) }
             }
-            if (comics.itemCount == 0 && refresh is LoadState.Loading) {
-                CircularProgressIndicator(Modifier.align(Alignment.Center))
-            }
-            if (refresh is LoadState.Error) {
-                CategoryMessage(
-                    refresh.error.message ?: "加载失败",
-                    comics::retry,
-                    Modifier.align(if (comics.itemCount == 0) Alignment.Center else Alignment.TopCenter),
-                )
-            } else if (comics.itemCount == 0 && refresh is LoadState.NotLoading &&
+            if (comics.itemCount == 0 && refresh is LoadState.NotLoading &&
                 comics.loadState.append.endOfPaginationReached) {
                 CategoryMessage("暂无漫画", comics::refresh, Modifier.align(Alignment.Center))
             }

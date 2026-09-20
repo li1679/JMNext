@@ -71,7 +71,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.par9uet.jm.core.common.filterBlockedTags
+import com.par9uet.jm.data.network.model.NetWorkResult
+import androidx.compose.runtime.produceState
 import com.par9uet.jm.core.designsystem.component.TabSkeleton
 import com.par9uet.jm.data.storage.LocalSettingManager
 import com.par9uet.jm.domain.store.UserManager
@@ -127,6 +128,7 @@ fun HomeScreen(
     val categories = homeComicState.list
     var selectedCategoryId by rememberSaveable { mutableStateOf<String?>(null) }
     var headerOffset by rememberSaveable { mutableFloatStateOf(0f) }
+    OnTabScrollToTop("home") { headerOffset = 0f }
     var headerHeight by remember { mutableIntStateOf(0) }
     var viewportHeight by remember { mutableIntStateOf(0) }
     var tabsHeight by remember { mutableIntStateOf(0) }
@@ -250,16 +252,33 @@ fun HomeScreen(
                                 },
                             ) { page ->
                                 val category = categories[page]
-                                val comicList = remember(category, localSetting.globalExcludedTags) {
-                                    category.list.filterBlockedTags(localSetting.globalExcludedTags)
-                                }
-                                gridStates.SaveableStateProvider(category.id) {
-                                    HomeComicGrid(
-                                        columns = adaptiveComicGridCells(localSetting.homeGridColumns),
-                                        comicList = comicList,
-                                        isLoading = false,
-                                        hasExcludedTags = localSetting.globalExcludedTags.isNotEmpty(),
-                                    )
+                                var retry by remember(category) { mutableIntStateOf(0) }
+                                val tags = localSetting.globalExcludedTags
+                                // A new rule must not briefly display items approved by the old rule.
+                                key(category, tags) {
+                                    val filtered by produceState<NetWorkResult<List<com.par9uet.jm.core.model.Comic>>?>(
+                                        initialValue = null, category, tags, retry,
+                                    ) {
+                                        value = null
+                                        value = comicViewModel.filterHomeComics(category.list, tags)
+                                    }
+                                    gridStates.SaveableStateProvider(category.id) {
+                                        Column {
+                                            category.errorMessage?.let { message ->
+                                                Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+                                                Button(onClick = comicViewModel::refreshHomeComic) { Text("重试") }
+                                            }
+                                            HomeComicGrid(
+                                                scrollToTopEnabled = page == pagerState.currentPage,
+                                                columns = adaptiveComicGridCells(localSetting.homeGridColumns),
+                                                comicList = (filtered as? NetWorkResult.Success)?.data.orEmpty(),
+                                                isLoading = filtered == null,
+                                                hasExcludedTags = tags.isNotEmpty(),
+                                                error = (filtered as? NetWorkResult.Error)?.message,
+                                                onRetry = { retry++ },
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -316,11 +335,14 @@ private fun HomeComicGrid(
     hasExcludedTags: Boolean,
     error: String? = null,
     onRetry: () -> Unit = {},
+    scrollToTopEnabled: Boolean = true,
 ) {
+    val gridState = rememberLazyGridState()
+    OnTabScrollToTop("home", scrollToTopEnabled) { gridState.animateScrollToItem(0) }
     LazyVerticalGrid(
         modifier = Modifier.fillMaxSize(),
         columns = columns,
-        state = rememberLazyGridState(),
+        state = gridState,
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Top),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 20.dp)

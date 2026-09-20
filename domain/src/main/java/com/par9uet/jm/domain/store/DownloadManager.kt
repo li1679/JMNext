@@ -18,6 +18,18 @@ import com.par9uet.jm.domain.worker.DownloadComicWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.CancellationException
+import com.par9uet.jm.domain.cache.DownloadFileLocks
+import com.par9uet.jm.domain.cache.comicChapterDownloadCandidates
+import com.par9uet.jm.domain.cache.getComicDownloadRootDir
+import com.par9uet.jm.domain.cache.getDownloadDir
+import com.par9uet.jm.domain.cache.writeComicCacheConfig
+import com.par9uet.jm.domain.notification.COMIC_CACHE_NOTIFICATION_ID_BASE
+import com.par9uet.jm.domain.notification.cancelProgressNotification
+import java.io.File
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -32,11 +44,27 @@ class DownloadManager(
     private val scope: CoroutineScope,
     private val toastManager: ToastManager,
 ) {
-    fun downloadComic(comic: Comic) {
+    private val commands = Mutex()
+
+    private fun launchCommand(block: suspend () -> Unit) {
         scope.launch(Dispatchers.IO) {
+            commands.withLock {
+                try {
+                    block()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    toastManager.showAsync("下载操作失败：${e.message}")
+                }
+            }
+        }
+    }
+
+    fun downloadComic(comic: Comic) {
+        launchCommand command@ {
             if (downloadComicDao.getExistingIds(listOf(comic.id)).isNotEmpty()) {
                 toastManager.showAsync("该漫画已在缓存列表中")
-                return@launch
+                return@command
             }
             insertComicTask(comic)
             toastManager.showAsync("创建缓存任务成功")
@@ -46,12 +74,12 @@ class DownloadManager(
 
     fun downloadComics(comics: List<Comic>) {
         if (comics.isEmpty()) return
-        scope.launch(Dispatchers.IO) {
+        launchCommand command@ {
             val existingIds = downloadComicDao.getExistingIds(comics.map { it.id }).toSet()
             val newComics = comics.filterNot { it.id in existingIds }
             if (newComics.isEmpty()) {
                 toastManager.showAsync("所选漫画已在缓存列表中")
-                return@launch
+                return@command
             }
 
             newComics.forEach { insertComicTask(it) }
@@ -70,12 +98,12 @@ class DownloadManager(
 
     fun downloadChapters(parentComic: Comic, chapters: List<ComicChapter>) {
         if (chapters.isEmpty()) return
-        scope.launch(Dispatchers.IO) {
+        launchCommand command@ {
             val existingIds = downloadComicDao.getExistingIds(chapters.map { it.id }).toSet()
             val newChapters = chapters.filterNot { it.id in existingIds }
             if (newChapters.isEmpty()) {
                 toastManager.showAsync("所选章节已在缓存列表中")
-                return@launch
+                return@command
             }
 
             val now = System.currentTimeMillis()
@@ -156,11 +184,10 @@ class DownloadManager(
                     TimeUnit.SECONDS
                 )
                 .build()
-            // 按 comicId 建唯一任务：用裸 enqueue 时，重复点「继续」或重试会为同一话
-            // 排出多个 Worker，它们并行写同一目录。REPLACE 保证同一话永远只有一个在跑。
+            // Explicit restart paths await cancellation before enqueue; duplicate requests keep existing work.
             workManager.enqueueUniqueWork(
                 workName(comicId),
-                ExistingWorkPolicy.REPLACE,
+                ExistingWorkPolicy.KEEP,
                 downloadRequest
             )
         }
@@ -172,15 +199,76 @@ class DownloadManager(
      * 暂停与删除都必须先走这里：只改数据库状态或删记录并不会让 Worker 停下，
      * 它会继续下载、继续写文件，最后把状态改回 complete。
      */
-    fun cancelDownloads(comicIds: List<Int>) {
-        if (comicIds.isEmpty()) return
+    suspend fun cancelDownloads(comicIds: List<Int>) = withContext(Dispatchers.IO) {
+        if (comicIds.isEmpty()) return@withContext
         val workManager = WorkManager.getInstance(context)
-        comicIds.distinct().forEach { workManager.cancelUniqueWork(workName(it)) }
+        comicIds.distinct().forEach { workManager.cancelUniqueWork(workName(it)).result.get() }
+        // WorkManager cancellation completes before a blocking image/file write necessarily stops.
+        comicIds.distinct().forEach { DownloadFileLocks.chapter(it).withLock { } }
+        val groupIds = comicIds.mapNotNull { id ->
+            downloadComicDao.getById(id)?.let { it.groupId.takeIf { group -> group != 0 } ?: it.id }
+        }.distinct()
+        groupIds.forEach { groupId ->
+            if (downloadComicDao.getByGroupId(groupId).none { it.id !in comicIds && it.status == "downloading" }) {
+                cancelProgressNotification(context, COMIC_CACHE_NOTIFICATION_ID_BASE + groupId)
+            }
+        }
+    }
+
+    suspend fun deleteDownloads(comicIds: List<Int>): Boolean = withContext(Dispatchers.IO) {
+        commands.withLock {
+            try {
+                cancelDownloads(comicIds)
+                comicIds.distinct().forEach { id ->
+                    DownloadFileLocks.chapter(id).withLock chapterLock@ {
+                        val item = downloadComicDao.getById(id) ?: return@chapterLock
+                        val groupId = item.groupId.takeIf { it != 0 } ?: item.id
+                        DownloadFileLocks.group(groupId).withLock {
+                            deleteChapterFiles(item)
+                            val remaining = downloadComicDao.getByGroupId(groupId).filter { it.id != id }
+                            if (remaining.isEmpty()) {
+                                val root = getComicDownloadRootDir(context, item)
+                                check(root.deleteRecursively()) { "无法删除下载目录：${root.name}" }
+                                item.coverPath.takeIf { it.isNotBlank() }?.let(::File)?.let { cover ->
+                                    if (cover.exists() && downloadComicDao.getAll().none { it.id != id && it.coverPath == cover.absolutePath }) {
+                                        check(cover.delete()) { "无法删除封面：${cover.name}" }
+                                    }
+                                }
+                            } else {
+                                writeComicCacheConfig(context, remaining.first(), remaining)
+                            }
+                            downloadComicDao.deleteByIds(listOf(id))
+                        }
+                    }
+                }
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                toastManager.showAsync("删除下载失败：${e.message}")
+                false
+            }
+        }
+    }
+
+    suspend fun pauseDownloads(comicIds: List<Int>) = withContext(Dispatchers.IO) {
+        commands.withLock {
+            cancelDownloads(comicIds)
+            downloadComicDao.updateStatusByIds(comicIds, "paused")
+        }
+    }
+
+    private fun deleteChapterFiles(item: DownloadComic) {
+        val paths = comicChapterDownloadCandidates(context, item) + File(getDownloadDir(context), item.id.toString())
+        paths.forEach { file ->
+            if (file.exists()) check(file.deleteRecursively()) { "无法删除章节文件：${file.name}" }
+        }
     }
 
     fun retryDownload(comicId: Int) {
-        scope.launch(Dispatchers.IO) {
-            val task = downloadComicDao.getById(comicId) ?: return@launch
+        launchCommand command@ {
+            downloadComicDao.getById(comicId) ?: return@command
+            cancelDownloads(listOf(comicId))
             downloadComicDao.updateProgress(
                 com.par9uet.jm.data.database.model.UpdateComicProgress(comicId, 0f)
             )
@@ -198,15 +286,16 @@ class DownloadManager(
      */
     fun resumeDownloads(comicIds: List<Int>) {
         if (comicIds.isEmpty()) return
-        scope.launch(Dispatchers.IO) {
+        launchCommand command@ {
             val validIds = comicIds.filter { id ->
                 val task = downloadComicDao.getById(id)
                 task != null && task.status != "complete"
             }.distinct()
             if (validIds.isEmpty()) {
                 toastManager.showAsync("没有可恢复的下载任务")
-                return@launch
+                return@command
             }
+            cancelDownloads(validIds)
             downloadComicDao.updateStatusByIds(validIds, "pending")
             enqueueDownloads(validIds)
             toastManager.showAsync("已恢复 ${validIds.size} 个下载任务")
@@ -214,10 +303,11 @@ class DownloadManager(
     }
 
     fun retryGroup(groupId: Int) {
-        scope.launch(Dispatchers.IO) {
+        launchCommand command@ {
             val chapters = downloadComicDao.getByGroupId(groupId)
             val errorIds = chapters.filter { it.status == "error" }.map { it.id }
-            if (errorIds.isEmpty()) return@launch
+            if (errorIds.isEmpty()) return@command
+            cancelDownloads(errorIds)
             downloadComicDao.updateStatusByIds(errorIds, "pending")
             errorIds.forEach { id ->
                 downloadComicDao.updateProgress(
@@ -230,22 +320,12 @@ class DownloadManager(
     }
 
     fun redownloadGroup(groupId: Int) {
-        scope.launch(Dispatchers.IO) {
+        launchCommand command@ {
             val items = downloadComicDao.getByGroupId(groupId)
-            if (items.isEmpty()) return@launch
+            if (items.isEmpty()) return@command
+            cancelDownloads(items.map { it.id })
             items.forEach { item ->
-                runCatching {
-                    val zipFile = java.io.File(item.zipPath)
-                    if (zipFile.exists()) {
-                        if (zipFile.isDirectory) {
-                            zipFile.deleteRecursively()
-                        } else {
-                            zipFile.delete()
-                        }
-                    }
-                }
-                val coverFile = java.io.File(item.coverPath)
-                if (coverFile.exists()) coverFile.delete()
+                deleteChapterFiles(item)
                 downloadComicDao.updateStatus(
                     com.par9uet.jm.data.database.model.UpdateComicStatus(item.id, "pending")
                 )

@@ -1,6 +1,7 @@
 package com.par9uet.jm.data.repository.di
 
 import com.par9uet.jm.data.repository.ComicRepository
+import com.par9uet.jm.data.repository.ComicTagFilter
 import com.par9uet.jm.data.repository.RemoteSettingRepository
 import com.par9uet.jm.data.repository.UserRepository
 import com.par9uet.jm.data.repository.impl.ComicRepositoryImpl
@@ -16,6 +17,7 @@ import org.koin.dsl.module
 val repositoryModule = module {
     single { EmbeddedClientManager(get()) }
     single { ComicRepositoryImpl(get(), get()) } bind ComicRepository::class
+    single { ComicTagFilter(get()) }
     single { UserRepositoryImpl(get(), get()) } bind UserRepository::class
     single { RemoteSettingRepositoryImpl(get(), get()) } bind RemoteSettingRepository::class
     single { UpdateRepositoryImpl(get()) } bind UpdateRepository::class

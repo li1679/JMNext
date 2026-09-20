@@ -378,9 +378,10 @@ class ComicRepositoryImpl(
     private suspend fun getComicDetailFromEmbeddedApi(id: Int): NetWorkResult<ComicDetailResponse> {
         return withContext(Dispatchers.IO) {
             try {
-                NetWorkResult.Success(withEmbeddedClient { client ->
-                    client.getAlbum(id.toString()).toComicDetailResponse()
-                })
+                val client = getEmbeddedClient()
+                NetWorkResult.Success(runInterruptible(Dispatchers.IO) { client.getAlbum(id.toString()).toComicDetailResponse() })
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 NetWorkResult.Error("内置 API 获取漫画详情失败：${e.message ?: "未知错误"}")
             }
@@ -391,54 +392,37 @@ class ComicRepositoryImpl(
         return withContext(Dispatchers.IO) {
             try {
                 val client = getEmbeddedClient()
-                coroutineScope {
-                    // 并发拉取各分类首页数据，单个分类失败不影响其他分类
-                    val latestDeferred = async { runCatching { client.getLatest(1).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val randomDeferred = async { runCatching { client.getRandomRecommend().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val serializationDeferred = async { runCatching { client.getSerialization(1).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    // 按分类 + 排序维度
-                    val doujinDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().category(Category.DOUJIN).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val singleDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().category(Category.SINGLE).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val shortDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().category(Category.SHORT).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val koreanDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().category(Category.KOREAN).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val americanDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().category(Category.AMERICAN).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val cosplayDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().category(Category.COSPLAY).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val image3dDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().category(Category.IMAGE_3D).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    // 按排序维度
-                    val weekHotDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().orderBy(OrderBy.MOST_VIEWED).time(TimeOption.WEEK).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val monthHotDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().orderBy(OrderBy.MOST_VIEWED).time(TimeOption.MONTH).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val mostLikedDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().orderBy(OrderBy.MOST_LIKED).time(TimeOption.ALL).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-                    val mostImagesDeferred = async { runCatching { client.getCategories(SearchQuery.Builder().orderBy(OrderBy.MOST_IMAGES).time(TimeOption.ALL).page(1).build()).content().orEmpty().map { it.toHomeListItem() } }.getOrDefault(emptyList()) }
-
-                    val builtinCategories = listOf(
-                        HomeSwiperComicListItemResponse("builtin_latest", "最新上架", "builtin_latest", "builtin", "", latestDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_week_hot", "本周热门", "builtin_week_hot", "builtin", "", weekHotDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_month_hot", "本月热门", "builtin_month_hot", "builtin", "", monthHotDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_most_liked", "最多喜欢", "builtin_most_liked", "builtin", "", mostLikedDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_random", "随机推荐", "builtin_random", "builtin", "", randomDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_serialization", "连载系列", "builtin_serialization", "builtin", "", serializationDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_doujin", "同人", "builtin_doujin", "builtin", "", doujinDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_single", "单本", "builtin_single", "builtin", "", singleDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_short", "短篇", "builtin_short", "builtin", "", shortDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_korean", "韩漫", "builtin_korean", "builtin", "", koreanDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_american", "美漫", "builtin_american", "builtin", "", americanDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_cosplay", "Cosplay", "builtin_cosplay", "builtin", "", cosplayDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_3d", "3D", "builtin_3d", "builtin", "", image3dDeferred.await()),
-                        HomeSwiperComicListItemResponse("builtin_most_images", "图片最多", "builtin_most_images", "builtin", "", mostImagesDeferred.await()),
-                    ).filter { it.content.isNotEmpty() }
-
-                    // 上游 1.1.8 新增首页动态推荐分类。保留本地固定分类，
-                    // 并把推荐接口已返回的首屏内容追加到首页，避免用户只看到旧分类。
-                    val promoteCategories = async {
-                        runCatching {
-                            client.getPromote()
-                                .mapNotNull { it.toHomePromoteCategory() }
-                                .filter { it.content.isNotEmpty() }
-                        }.getOrDefault(emptyList())
-                    }
-
-                    NetWorkResult.Success(promoteCategories.await() + builtinCategories)
+                fun section(id: String, title: String, load: () -> List<JmAlbumMeta>) = HomeSectionRequest(id, title) {
+                    val items = runInterruptible(Dispatchers.IO) { load().map { it.toHomeListItem() } }
+                    listOf(HomeSwiperComicListItemResponse(id, title, id, "builtin", "", items))
                 }
+                fun category(id: String, title: String, value: Category) = section(id, title) {
+                    client.getCategories(SearchQuery.Builder().category(value).page(1).build()).content().orEmpty()
+                }
+                fun ordered(id: String, title: String, order: OrderBy, time: TimeOption) = section(id, title) {
+                    client.getCategories(SearchQuery.Builder().orderBy(order).time(time).page(1).build()).content().orEmpty()
+                }
+                loadHomeSections(listOf(
+                    HomeSectionRequest("promote", "首页推荐") {
+                        runInterruptible(Dispatchers.IO) { client.getPromote().mapNotNull { it.toHomePromoteCategory() } }
+                    },
+                    section("builtin_latest", "最新上架") { client.getLatest(1).content().orEmpty() },
+                    ordered("builtin_week_hot", "本周热门", OrderBy.MOST_VIEWED, TimeOption.WEEK),
+                    ordered("builtin_month_hot", "本月热门", OrderBy.MOST_VIEWED, TimeOption.MONTH),
+                    ordered("builtin_most_liked", "最多喜欢", OrderBy.MOST_LIKED, TimeOption.ALL),
+                    section("builtin_random", "随机推荐") { client.getRandomRecommend().orEmpty() },
+                    section("builtin_serialization", "连载系列") { client.getSerialization(1).content().orEmpty() },
+                    category("builtin_doujin", "同人", Category.DOUJIN),
+                    category("builtin_single", "单本", Category.SINGLE),
+                    category("builtin_short", "短篇", Category.SHORT),
+                    category("builtin_korean", "韩漫", Category.KOREAN),
+                    category("builtin_american", "美漫", Category.AMERICAN),
+                    category("builtin_cosplay", "Cosplay", Category.COSPLAY),
+                    category("builtin_3d", "3D", Category.IMAGE_3D),
+                    ordered("builtin_most_images", "图片最多", OrderBy.MOST_IMAGES, TimeOption.ALL),
+                ))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 NetWorkResult.Error("内置 API 获取首页数据失败：${e.message ?: "未知错误"}")
             }
@@ -513,7 +497,7 @@ class ComicRepositoryImpl(
                         .page(page)
                         .orderBy(order.toEmbeddedOrderBy())
                         .build()
-                    client.search(query).toComicListResponse(searchContent)
+                    client.search(query).toComicListResponse(searchContent, page)
                 })
             } catch (e: Exception) {
                 NetWorkResult.Error("内置 API 搜索漫画失败：${e.message ?: "未知错误"}")
@@ -557,12 +541,13 @@ class ComicRepositoryImpl(
         )
     }
 
-    private fun JmSearchPage.toComicListResponse(searchContent: String): ComicListResponse {
+    private fun JmSearchPage.toComicListResponse(searchContent: String, page: Int = 1): ComicListResponse {
         return ComicListResponse(
             search_query = searchContent,
             total = totalItems().toString(),
             redirect_aid = null,
-            content = content().orEmpty().map { it.toContentListItem() }
+            content = content().orEmpty().map { it.toContentListItem() },
+            nextPage = if (content().isNotEmpty() && page < totalPages()) page + 1 else null,
         )
     }
 
@@ -577,7 +562,8 @@ class ComicRepositoryImpl(
             category_sub = subCategory().toContentCategory(),
             liked = false,
             is_favorite = false,
-            update_at = 0
+            update_at = 0,
+            tags = tags().orEmpty(),
         )
     }
 
@@ -592,7 +578,8 @@ class ComicRepositoryImpl(
             category_sub = subCategory().toHomeCategory(),
             liked = false,
             is_favorite = false,
-            update_at = 0
+            update_at = 0,
+            tags = tags().orEmpty(),
         )
     }
 

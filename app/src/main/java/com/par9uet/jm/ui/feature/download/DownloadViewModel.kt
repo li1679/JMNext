@@ -133,11 +133,7 @@ class DownloadViewModel(
         val ids = _editState.value.selectedIds.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {
-            // 先停 Worker 再删记录：反过来的话 Worker 仍在跑，会继续写文件，
-            // 并按已被删除的 id 更新状态，把记录又写回去
-            downloadManager.cancelDownloads(ids)
-            downloadComicDao.deleteByIds(ids)
-            clearSelection()
+            if (downloadManager.deleteDownloads(ids)) clearSelection()
         }
     }
 
@@ -148,8 +144,7 @@ class DownloadViewModel(
     fun deleteMany(ids: Set<Int>) {
         if (ids.isEmpty()) return
         viewModelScope.launch {
-            downloadManager.cancelDownloads(ids.toList())
-            downloadComicDao.deleteByIds(ids.toList())
+            if (!downloadManager.deleteDownloads(ids.toList())) return@launch
             _editState.update {
                 val selected = it.selectedIds - ids
                 it.copy(editing = selected.isNotEmpty(), selectedIds = selected)
@@ -160,9 +155,10 @@ class DownloadViewModel(
     fun pauseSelected() {
         val ids = _editState.value.selectedIds.toList()
         if (ids.isEmpty()) return
-        // 仅把状态改成 paused 不会让 Worker 停下，它会一路下载完并把状态改回 complete
-        downloadManager.cancelDownloads(ids)
-        updateSelectedStatus("paused")
+        viewModelScope.launch {
+            downloadManager.pauseDownloads(ids)
+            clearSelection()
+        }
     }
 
     fun startSelected() {
@@ -170,15 +166,6 @@ class DownloadViewModel(
         if (ids.isEmpty()) return
         clearSelection()
         downloadManager.resumeDownloads(ids)
-    }
-
-    private fun updateSelectedStatus(status: String) {
-        val ids = _editState.value.selectedIds.toList()
-        if (ids.isEmpty()) return
-        viewModelScope.launch {
-            downloadComicDao.updateStatusByIds(ids, status)
-            clearSelection()
-        }
     }
 
     fun redownloadSelected() {

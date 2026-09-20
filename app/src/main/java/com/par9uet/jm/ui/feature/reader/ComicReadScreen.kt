@@ -164,45 +164,19 @@ fun ComicReadScreen(
         comicReadViewModel.showToolBar()
     }
 
-    LaunchedEffect(comicId) {
+    LaunchedEffect(comicId, localOnly) {
         val onSuccess = {
-            if (loadedComicId != comicId) {
-                // 恢复上次阅读页数
-                val savedIndex = if (readHistoryComicId > 0) {
-                    readHistoryManager.lastReadPageIndex(readHistoryComicId, comicId, readHistory)
-                } else 0
-                currentIndexState = savedIndex
-                targetIndex = savedIndex
-                loadedComicId = comicId
-            } else {
-                targetIndex = currentIndexState.coerceAtLeast(0)
-            }
+            targetIndex = currentIndexState.coerceAtLeast(0)
             zoomState.reset()
             comicReadViewModel.decodeIndex(targetIndex, context)
         }
-        if (localOnly) {
-            comicReadViewModel.clearComicDetail()
-            comicReadViewModel.getLocalComicPicList(comicId, context, onSuccess)
-        } else {
-            comicReadViewModel.getComicDetail(comicId)
-            comicReadViewModel.getComicPicList(
-                comicId,
-                onSuccess
-            )
-        }
+        comicReadViewModel.loadChapter(comicId, localOnly, context, onSuccess)
     }
 
     // 退出阅读时保存当前页数进度
-    DisposableEffect(comicId, size) {
+    DisposableEffect(comicReadViewModel) {
         onDispose {
-            if (size > 0 && readHistoryComicId > 0) {
-                readHistoryManager.saveReadProgress(
-                    readHistoryComicId,
-                    comicId,
-                    currentIndexState,
-                    size
-                )
-            }
+            comicReadViewModel.leaveReader()
         }
     }
 

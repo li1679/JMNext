@@ -9,7 +9,8 @@ class HomeSwiperComicListItemResponse(
     val slug: String,
     val type: String,
     val filter_val: String,
-    val content: List<ListItem>
+    val content: List<ListItem>,
+    val errorMessage: String? = null,
 ) {
     data class ListItem(
         val id: String,
@@ -22,6 +23,7 @@ class HomeSwiperComicListItemResponse(
         val liked: Boolean,
         val is_favorite: Boolean,
         val update_at: Int,
+        val tags: List<String> = emptyList(),
     ) {
         data class Category(
             val id: String?,
@@ -33,6 +35,7 @@ class HomeSwiperComicListItemResponse(
         return HomeComicSwiperItem(
             id = id,
             title = title,
+            errorMessage = errorMessage,
             list = content.map {
                 Comic(
                     id = it.id.toInt(),
@@ -42,7 +45,7 @@ class HomeSwiperComicListItemResponse(
                     readCount = 0,
                     likeCount = 0,
                     commentCount = 0,
-                    tagList = listOf(),
+                    tagList = it.tags,
                     roleList = listOf(),
                     workList = listOf(),
                     isLike = false,

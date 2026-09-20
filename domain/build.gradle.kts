@@ -45,4 +45,6 @@ dependencies {
     api(libs.androidx.ui.graphics)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("io.mockk:mockk:1.13.17")
 }

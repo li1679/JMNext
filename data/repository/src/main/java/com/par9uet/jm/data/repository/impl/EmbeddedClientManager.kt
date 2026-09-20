@@ -2,6 +2,8 @@ package com.par9uet.jm.data.repository.impl
 
 import com.par9uet.jm.data.storage.CookieStorage
 import io.github.jukomu.jmcomic.api.enums.ClientType
+import io.github.jukomu.jmcomic.api.model.SearchQuery
+import io.github.jukomu.jmcomic.api.model.JmSearchPage
 import io.github.jukomu.jmcomic.core.client.impl.JmApiClient
 import io.github.jukomu.jmcomic.core.config.JmConfiguration
 import io.github.jukomu.jmcomic.core.net.OkHttpBuilder
@@ -11,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.runInterruptible
 
 /**
  * 共享的 JmApiClient 实例：login() 写入的登录态与 Cookie 需被所有 Repository 看到，
@@ -21,6 +24,14 @@ import kotlinx.coroutines.withTimeoutOrNull
 class EmbeddedClientManager(
     private val cookieStorage: CookieStorage,
 ) {
+    private val categoryRequestScope = CategoryRequestScope()
+
+    suspend fun getCategories(slug: String, query: SearchQuery): JmSearchPage {
+        val current = getClient()
+        return runInterruptible(Dispatchers.IO) {
+            categoryRequestScope.withCategory(slug) { current.getCategories(query) }
+        }
+    }
     @Volatile
     private var client: JmApiClient? = null
     @Volatile
@@ -46,6 +57,7 @@ class EmbeddedClientManager(
         val domainManager = context.domainManager
         isDomainInitialized = { domainManager.isInitialized }
         val clientWithCookieInjection = context.client.newBuilder()
+            .addInterceptor(categoryRequestScope)
             .addInterceptor { chain ->
                 val cookies = cookieStorage.get()
                 val request = if (cookies.isNotEmpty()) {

@@ -27,6 +27,7 @@ import com.par9uet.jm.ui.feature.user.UserScreen
 import com.par9uet.jm.data.storage.LocalSettingManager
 import com.par9uet.jm.domain.store.UserManager
 import org.koin.compose.getKoin
+import com.par9uet.jm.ui.feature.category.CategoryScreen
 
 @Composable
 fun TabScreen(
@@ -76,6 +77,9 @@ fun TabScreen(
                     ) {
                         composable("home") {
                             HomeScreen()
+                        }
+                        composable("category") {
+                            CategoryScreen()
                         }
                         composable("user") {
                             UserScreen()

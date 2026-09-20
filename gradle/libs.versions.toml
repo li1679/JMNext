@@ -27,7 +27,7 @@ room = "2.8.4"
 testRunner = "1.7.0"
 workRuntimeKtx = "2.11.1"
 desugarJdkLibs = "2.1.4"
-jmcomicApiJava = "1.1.8"
+jmcomicApiJava = "1.1.9"
 materialKolor = "4.1.1"
 
 [libraries]

@@ -36,8 +36,10 @@ dependencies {
     // 内置数据源：直接走 JMComic 客户端，与 HTTP 线路互为备选
     api(libs.jmcomic.api)
     implementation(libs.jmcomic.core) {
-        exclude(group = "org.sejda.imageio", module = "webp-imageio")
+        exclude(group = "io.github.darkxanter", module = "webp-imageio")
     }
-    implementation(libs.jmcomic.android.support)
+    implementation(libs.jmcomic.android.support) {
+        exclude(group = "io.github.darkxanter", module = "webp-imageio")
+    }
     testImplementation(libs.junit)
 }

@@ -1,6 +1,11 @@
 package com.par9uet.jm.data.repository.impl
 
 import com.par9uet.jm.core.model.ComicSearchOrderFilter
+import com.par9uet.jm.core.model.ComicCategory
+import com.par9uet.jm.core.model.CategoryFilter
+import com.par9uet.jm.core.model.CategoryComicPage
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runInterruptible
 import com.par9uet.jm.data.repository.BaseRepository
 import com.par9uet.jm.data.repository.ComicRepository
 import com.par9uet.jm.data.network.model.CollectComicResponse
@@ -48,6 +53,44 @@ class ComicRepositoryImpl(
     initManager: InitManager,
     private val embeddedClientManager: EmbeddedClientManager,
 ) : BaseRepository(initManager), ComicRepository {
+
+    override suspend fun getCategories(): NetWorkResult<List<ComicCategory>> {
+        return try {
+            val client = getEmbeddedClient()
+            val categories = runInterruptible(Dispatchers.IO) { client.getCategoriesList() }
+            NetWorkResult.Success(categories.categories().map { category ->
+                val slug = if (category.id() == "0" && category.slug().isBlank()) "0" else category.slug()
+                check(slug.isNotBlank()) { "数据源返回空分类标识" }
+                ComicCategory(category.id(), category.name(), slug, category.subCategories().map { sub ->
+                    check(sub.slug().isNotBlank()) { "数据源返回空子分类标识" }
+                    ComicCategory(sub.cid(), sub.name(), sub.slug())
+                }, search = category.type() == "search")
+            })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            NetWorkResult.Error("获取分类失败：${e.message}")
+        }
+    }
+
+    override suspend fun getCategoryComics(page: Int, filter: CategoryFilter): NetWorkResult<CategoryComicPage> {
+        return try {
+            val query = SearchQuery.Builder().page(page).orderBy(OrderBy.valueOf(filter.order.name))
+                .text(if (filter.search) filter.categorySlug else "").build()
+            val result = if (filter.search) {
+                val client = getEmbeddedClient()
+                runInterruptible(Dispatchers.IO) { client.search(query) }
+            } else embeddedClientManager.getCategories(filter.effectiveSlug, query)
+            NetWorkResult.Success(CategoryComicPage(
+                comics = result.toComicListResponse("").toComicList(),
+                nextPage = if (result.content().isNotEmpty() && page < result.totalPages()) page + 1 else null,
+            ))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            NetWorkResult.Error("获取分类漫画失败：${e.message}")
+        }
+    }
 
     companion object {
         private val imageCache = mutableMapOf<Int, List<JmImage>>()

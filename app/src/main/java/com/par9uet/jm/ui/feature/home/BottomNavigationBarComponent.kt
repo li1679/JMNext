@@ -3,6 +3,7 @@ package com.par9uet.jm.ui.feature.home
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -24,6 +25,7 @@ import com.par9uet.jm.R
 /** 底部导航的目标页，NavigationBar 与 NavigationRail 共用 */
 private enum class TabDestination(val route: String, val label: String) {
     Home("home", "首页"),
+    Category("category", "分类"),
     Collect("collect", "收藏"),
     User("user", "我的"),
 }
@@ -33,6 +35,7 @@ private enum class TabDestination(val route: String, val label: String) {
 private fun TabDestination.TabIcon() {
     when (this) {
         TabDestination.Home -> Icon(painterResource(R.drawable.home_icon), contentDescription = null)
+        TabDestination.Category -> Icon(Icons.Filled.Category, contentDescription = null)
         TabDestination.Collect -> Icon(Icons.Filled.Bookmark, contentDescription = null)
         TabDestination.User -> Icon(painterResource(R.drawable.person_icon), contentDescription = null)
     }

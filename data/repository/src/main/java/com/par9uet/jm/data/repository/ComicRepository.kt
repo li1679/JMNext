@@ -1,6 +1,9 @@
 package com.par9uet.jm.data.repository
 
 import com.par9uet.jm.core.model.ComicSearchOrderFilter
+import com.par9uet.jm.core.model.ComicCategory
+import com.par9uet.jm.core.model.CategoryFilter
+import com.par9uet.jm.core.model.CategoryComicPage
 import com.par9uet.jm.data.network.model.CollectComicResponse
 import com.par9uet.jm.data.network.model.ComicDetailResponse
 import com.par9uet.jm.data.network.model.ComicListResponse
@@ -14,6 +17,8 @@ import com.par9uet.jm.data.network.model.WeekRecommendComicResponse
 import com.par9uet.jm.data.network.model.WeekResponse
 
 interface ComicRepository {
+    suspend fun getCategories(): NetWorkResult<List<ComicCategory>>
+    suspend fun getCategoryComics(page: Int, filter: CategoryFilter): NetWorkResult<CategoryComicPage>
     suspend fun getComicDetail(id: Int): NetWorkResult<ComicDetailResponse>
     suspend fun likeComic(id: Int): NetWorkResult<LikeComicResponse>
     suspend fun collectComic(id: Int): NetWorkResult<CollectComicResponse>

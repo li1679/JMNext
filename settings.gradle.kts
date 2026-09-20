@@ -27,6 +27,11 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        // Mirrors may publish JMComic metadata before the matching JARs arrive.
+        exclusiveContent {
+            forRepository { mavenCentral() }
+            filter { includeGroup("io.github.jukomu") }
+        }
         maven("https://maven.aliyun.com/repository/public") {
             content { excludeGroup("com.google.devtools.ksp") }
         }

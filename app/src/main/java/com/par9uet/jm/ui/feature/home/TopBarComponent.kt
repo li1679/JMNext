@@ -40,6 +40,7 @@ fun TopBarComponent() {
     val backStackEntryState by tabNavController.currentBackStackEntryAsState()
     when (backStackEntryState?.destination?.route) {
         "home" -> TabTopBar("禁漫天堂")
+        "category" -> TabTopBar("分类")
         "collect" -> TabTopBar("我的收藏")
         "user" -> TabTopBar("个人中心")
     }

@@ -49,6 +49,8 @@ class SearchComicPagingSourceTest {
     }
 
     private class FakeComicRepository : ComicRepository {
+        override suspend fun getCategories(): NetWorkResult<List<com.par9uet.jm.core.model.ComicCategory>> = unused()
+        override suspend fun getCategoryComics(page: Int, filter: com.par9uet.jm.core.model.CategoryFilter): NetWorkResult<com.par9uet.jm.core.model.CategoryComicPage> = unused()
         var lastSearchContent: String? = null
 
         override suspend fun getComicList(

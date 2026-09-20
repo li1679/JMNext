@@ -18,7 +18,7 @@ data class SearchComicFilter(
 class SearchComicPagingSource(
     private val comicRepository: ComicRepository,
     private val filter: SearchComicFilter,
-    private val tagFilter: ComicTagFilter = ComicTagFilter(comicRepository),
+    private val tagFilter: ComicTagFilter = ComicTagFilter(),
     private val onFindSingleComicId: (id: Int?) -> Unit = {},
 ) : PagingSource<Int, Comic>() {
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Comic> {

@@ -9,14 +9,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -29,7 +27,6 @@ import com.par9uet.jm.domain.image.ImageResultState
 import com.par9uet.jm.data.storage.LocalSettingManager
 import com.par9uet.jm.ui.component.ComicPicImage
 import com.par9uet.jm.ui.feature.reader.ComicReadViewModel
-import com.par9uet.jm.core.common.log
 import org.koin.compose.getKoin
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
@@ -43,7 +40,6 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun ComicScrollRead(
     lazyListState: LazyListState,
-    pagerState: PagerState,
     targetIndex: Int,
     zoomState: ReaderZoomState,
     comicReadViewModel: ComicReadViewModel = koinViewModel(),
@@ -56,7 +52,7 @@ fun ComicScrollRead(
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     val list = comicPicState.data ?: listOf()
     val context = LocalContext.current
-    var programmaticScroll by remember { mutableStateOf(false) }
+    val updateSlider by rememberUpdatedState(onUpdateSliderValue)
 
     fun scrollToCurrentPage() {
         if (list.isEmpty()) return
@@ -64,8 +60,7 @@ fun ComicScrollRead(
         currentIndexState = target
         coroutineScope.launch {
             lazyListState.scrollToItem(target)
-            pagerState.scrollToPage(target)
-            onUpdateSliderValue(target.toFloat())
+            updateSlider(target.toFloat())
         }
     }
 
@@ -73,10 +68,7 @@ fun ComicScrollRead(
         if (list.isEmpty()) return@LaunchedEffect
         val target = targetIndex.coerceIn(0, list.lastIndex)
         if (lazyListState.firstVisibleItemIndex != target) {
-            programmaticScroll = true
             lazyListState.scrollToItem(target)
-            pagerState.scrollToPage(target)
-            programmaticScroll = false
         }
     }
 
@@ -104,13 +96,10 @@ fun ComicScrollRead(
         launch {
             snapshotFlow { lazyListState.firstVisibleItemIndex }
                 .distinctUntilChanged()
-                .debounce(150)
                 .collect {
-                    if (programmaticScroll) return@collect
-                    log("lazyListState.firstVisibleItemIndex currentIndexState = $currentIndexState it = $it")
                     if (currentIndexState != it) {
+                        updateSlider(it.toFloat())
                         currentIndexState = it
-                        onUpdateSliderValue(it.toFloat())
                         comicReadViewModel.decodeIndex(currentIndexState, context)
                     }
                 }

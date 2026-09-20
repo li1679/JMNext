@@ -51,8 +51,6 @@ import com.par9uet.jm.data.repository.ComicRepository
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.domain.store.RemoteSettingManager
 import com.par9uet.jm.core.common.ToastManager
-import com.par9uet.jm.core.common.isBlockedByTags
-import com.par9uet.jm.data.storage.LocalSettingManager
 import com.par9uet.jm.ui.component.CommonScaffold
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,7 +69,6 @@ fun ExtractCodeScreen(
     remoteSettingManager: RemoteSettingManager = getKoin().get(),
     toastManager: ToastManager = getKoin().get(),
     imageLoader: ImageLoader = getKoin().get(),
-    localSettingManager: LocalSettingManager = getKoin().get(),
 ) {
     val mainNavController = LocalMainNavController.current
     val clipboardManager = LocalClipboardManager.current
@@ -105,12 +102,7 @@ fun ExtractCodeScreen(
             is NetWorkResult.Success<*> -> {
                 @Suppress("UNCHECKED_CAST")
                 val comic = (result.data as com.par9uet.jm.data.network.model.ComicDetailResponse).toComic()
-                if (comic.isBlockedByTags(localSettingManager.localSettingState.value.globalExcludedTags)) {
-                    toastManager.showAsync("该作品命中全局排除标签")
-                    extractedCode = null
-                } else {
-                    previewComic = comic
-                }
+                previewComic = comic
             }
             is NetWorkResult.Error -> {
                 toastManager.showAsync("获取漫画详情失败：${result.message}")

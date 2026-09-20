@@ -6,7 +6,6 @@ import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.data.repository.ComicRepository
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.network.model.WeekRecommendComicResponse
-import com.par9uet.jm.data.repository.ComicTagFilter
 
 data class WeekFilter(
     val categoryId: String? = null,
@@ -16,8 +15,6 @@ data class WeekFilter(
 class WeekComicPagingSource(
     private val comicRepository: ComicRepository,
     private val filter: WeekFilter,
-    private val blockedTagList: List<String> = listOf(),
-    private val tagFilter: ComicTagFilter = ComicTagFilter(comicRepository),
 ) : PagingSource<Int, Comic>() {
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Comic> {
         val currentPage = params.key ?: 1
@@ -38,10 +35,7 @@ class WeekComicPagingSource(
             }
 
             is NetWorkResult.Success<WeekRecommendComicResponse> -> {
-                val filtered = tagFilter.filter(data.data.toComicList(), blockedTagList)
-                if (filtered is NetWorkResult.Error) return LoadResult.Error(IllegalStateException(filtered.message))
-                val list = (filtered as NetWorkResult.Success).data
-                // 用过滤前的原始条数判断，避免屏蔽标签把本页清空后被误判成末页
+                val list = data.data.toComicList()
                 val isLastPage = data.data.list.size < params.loadSize
                 LoadResult.Page(
                     data = list,

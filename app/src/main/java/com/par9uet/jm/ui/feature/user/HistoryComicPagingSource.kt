@@ -4,14 +4,11 @@ import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.data.repository.UserRepository
-import com.par9uet.jm.data.repository.ComicTagFilter
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.network.model.UserHistoryComicListResponse
 
 class HistoryComicPagingSource(
     private val userRepository: UserRepository,
-    private val blockedTagList: List<String> = listOf(),
-    private val tagFilter: ComicTagFilter,
 ) : PagingSource<Int, Comic>() {
     private val loadedIdsByPage = mutableMapOf<Int, Set<Int>>()
 
@@ -28,12 +25,9 @@ class HistoryComicPagingSource(
                 val loadedIds = loadedIdsByPage.filterKeys { it < currentPage }.values.flatten().toSet()
                 val rawList = data.data.toComicList().distinctBy { it.id }
                 val newItems = rawList.filterNot { it.id in loadedIds }
-                val filtered = tagFilter.filter(newItems, blockedTagList)
-                if (filtered is NetWorkResult.Error) return LoadResult.Error(IllegalStateException(filtered.message))
-                val list = (filtered as NetWorkResult.Success).data
                 loadedIdsByPage[currentPage] = rawList.mapTo(mutableSetOf()) { it.id }
                 LoadResult.Page(
-                    data = list,
+                    data = newItems,
                     prevKey = null,
                     nextKey = if (newItems.isEmpty()) null else currentPage + 1
                 )

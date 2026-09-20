@@ -82,8 +82,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.data.storage.ComicReadHistory
-import com.par9uet.jm.data.storage.LocalSettingManager
-import com.par9uet.jm.core.common.isBlockedByTags
 import com.par9uet.jm.domain.store.DownloadManager
 import com.par9uet.jm.domain.store.ReadHistoryManager
 import com.par9uet.jm.domain.store.RemoteSettingManager
@@ -91,7 +89,6 @@ import com.par9uet.jm.domain.store.UserManager
 import com.par9uet.jm.ui.component.ChapterMultiSelectDialog
 import com.par9uet.jm.ui.component.ComicContentTag
 import com.par9uet.jm.ui.component.ComicCoverImage
-import com.par9uet.jm.ui.component.CommonScaffold
 import com.par9uet.jm.ui.component.ComicRoleTag
 import com.par9uet.jm.ui.component.ComicWorkTag
 import com.par9uet.jm.ui.feature.detail.ComicDetailViewModel
@@ -178,13 +175,11 @@ fun ComicDetailScreen(
     readHistoryManager: ReadHistoryManager = getKoin().get(),
     downloadManager: DownloadManager = getKoin().get(),
     userManager: UserManager = getKoin().get(),
-    localSettingManager: LocalSettingManager = getKoin().get(),
 ) {
     val mainNavController = LocalMainNavController.current
     val comicDetailState by comicDetailViewModel.comicDetailState.collectAsStateWithLifecycle()
     val readHistory by readHistoryManager.readHistoryState.collectAsStateWithLifecycle()
     val isLogin by userManager.isLoginState.collectAsStateWithLifecycle()
-    val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     var showDownloadChapterDialog by remember { mutableStateOf(false) }
     var selectedChapterIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
 
@@ -235,19 +230,6 @@ fun ComicDetailScreen(
 
     if (comicDetailState.isLoading && comicDetailState.data == null) {
         ComicDetailSkeleton()
-        return
-    }
-
-    if (comicDetailState.data?.isBlockedByTags(localSetting.globalExcludedTags) == true) {
-        CommonScaffold(title = "已排除") {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "该作品命中全局排除标签",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
         return
     }
 

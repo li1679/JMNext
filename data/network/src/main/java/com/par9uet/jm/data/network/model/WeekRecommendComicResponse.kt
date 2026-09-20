@@ -17,6 +17,7 @@ data class WeekRecommendComicResponse(
         val liked: Boolean,
         val is_favorite: Boolean,
         val update_at: Int,
+        val tags: List<String> = emptyList(),
     ) {
         data class Category(
             val id: String?,
@@ -34,10 +35,10 @@ data class WeekRecommendComicResponse(
                 readCount = 0,
                 likeCount = 0,
                 commentCount = 0,
-                tagList = listOfNotNull(
+                tagList = (it.tags + listOfNotNull(
                     it.category.title,
                     it.category_sub.title
-                ).filter { title -> title.isNotBlank() }.distinct(),
+                )).filter { title -> title.isNotBlank() }.distinct(),
                 roleList = listOf(),
                 workList = listOf(),
                 isLike = false,

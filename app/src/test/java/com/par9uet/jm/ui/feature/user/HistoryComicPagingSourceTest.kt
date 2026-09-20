@@ -4,7 +4,6 @@ import androidx.paging.PagingSource
 import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.network.model.UserHistoryComicListResponse
-import com.par9uet.jm.data.repository.ComicTagFilter
 import com.par9uet.jm.data.repository.UserRepository
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -16,13 +15,6 @@ import org.junit.Test
 
 class HistoryComicPagingSourceTest {
     private val repository = mockk<UserRepository>()
-    private val tagFilter = mockk<ComicTagFilter>()
-
-    init {
-        coEvery { tagFilter.filter(any(), any()) } answers {
-            NetWorkResult.Success(firstArg<List<Comic>>())
-        }
-    }
 
     @Test
     fun repeatedServerPageStopsAndDoesNotAppendDuplicates() = runTest {
@@ -56,12 +48,11 @@ class HistoryComicPagingSourceTest {
     }
 
     @Test
-    fun excludedItemsStillAdvancePaginationAndDetectRepeatedPage() = runTest {
+    fun taggedItemsRemainVisibleAndDetectRepeatedPage() = runTest {
         coEvery { repository.getHistoryComicList(any()) } returns response(listOf(1, 2))
-        coEvery { tagFilter.filter(any(), any()) } returns NetWorkResult.Success(emptyList())
         val source = source()
         val first = source.page(1)
-        assertTrue(first.data.isEmpty())
+        assertEquals(listOf(1, 2), first.data.map { it.id })
         assertEquals(2, first.nextKey)
         assertNull(source.page(2).nextKey)
     }
@@ -80,20 +71,18 @@ class HistoryComicPagingSourceTest {
     }
 
     @Test
-    fun failedFilteringCanRetryWithoutLosingItems() = runTest {
+    fun failedRequestCanRetryWithoutLosingItems() = runTest {
         coEvery { repository.getHistoryComicList(1) } returns response(listOf(1))
         coEvery { repository.getHistoryComicList(2) } returns response(listOf(2))
         val source = source()
         source.page(1)
-        coEvery { tagFilter.filter(any(), any()) } returns NetWorkResult.Error("failed")
+        coEvery { repository.getHistoryComicList(2) } returns NetWorkResult.Error("failed")
         assertTrue(source.load(PagingSource.LoadParams.Append(2, 20, false)) is PagingSource.LoadResult.Error)
-        coEvery { tagFilter.filter(any(), any()) } answers {
-            NetWorkResult.Success(firstArg<List<Comic>>())
-        }
+        coEvery { repository.getHistoryComicList(2) } returns response(listOf(2))
         assertEquals(listOf(2), source.page(2).data.map { it.id })
     }
 
-    private fun source() = HistoryComicPagingSource(repository, listOf("excluded"), tagFilter)
+    private fun source() = HistoryComicPagingSource(repository)
 
     private suspend fun HistoryComicPagingSource.page(page: Int): PagingSource.LoadResult.Page<Int, Comic> =
         load(if (page == 1) PagingSource.LoadParams.Refresh(null, 20, false)
@@ -106,6 +95,7 @@ class HistoryComicPagingSourceTest {
                     id = id.toString(), author = "author", description = "", name = "comic $id",
                     image = "", category = UserHistoryComicListResponse.ListItem.Category(null, null),
                     category_sub = UserHistoryComicListResponse.ListItem.Category(null, null),
+                    tags = listOf("excluded"),
                 )
             },
             total = ids.size,

@@ -17,7 +17,7 @@ import org.koin.dsl.module
 val repositoryModule = module {
     single { EmbeddedClientManager(get()) }
     single { ComicRepositoryImpl(get(), get()) } bind ComicRepository::class
-    single { ComicTagFilter(get()) }
+    single { ComicTagFilter() }
     single { UserRepositoryImpl(get(), get()) } bind UserRepository::class
     single { RemoteSettingRepositoryImpl(get(), get()) } bind RemoteSettingRepository::class
     single { UpdateRepositoryImpl(get()) } bind UpdateRepository::class

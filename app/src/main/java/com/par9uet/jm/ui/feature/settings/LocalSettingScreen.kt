@@ -6,8 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,11 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Api
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.DarkMode
@@ -50,12 +45,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -113,7 +105,6 @@ fun LocalSettingScreen(
     val localSetting by localSettingManager.localSettingState.collectAsStateWithLifecycle()
     var settingType by remember { mutableStateOf<SettingType>(SettingType.Theme) }
     var isOpenSettingSelectDialog by remember { mutableStateOf(false) }
-    var showGlobalExcludedTagsDialog by remember { mutableStateOf(false) }
 
     fun openSetting(type: SettingType) {
         settingType = type
@@ -176,13 +167,6 @@ fun LocalSettingScreen(
                         "\u9996\u9875 ${gridColumnsText(localSetting.homeGridColumns)} \u00b7 \u6536\u85cf ${gridColumnsText(localSetting.collectGridColumns)} \u00b7 \u7f13\u5b58 ${gridColumnsText(localSetting.downloadGridColumns)} \u00b7 \u5386\u53f2 ${gridColumnsText(localSetting.historyGridColumns)} \u00b7 \u641c\u7d22 ${gridColumnsText(localSetting.searchGridColumns)}"
                     ) {
                         openSetting(SettingType.AllGridColumns)
-                    }
-                    SettingsRow(
-                        icon = Icons.Rounded.Block,
-                        title = "全局排除标签",
-                        value = if (localSetting.globalExcludedTags.isEmpty()) "未设置" else "${localSetting.globalExcludedTags.size} 个标签"
-                    ) {
-                        showGlobalExcludedTagsDialog = true
                     }
                 }
             }
@@ -278,16 +262,6 @@ fun LocalSettingScreen(
                 localSetting = localSetting,
                 localSettingManager = localSettingManager,
                 onDismiss = { isOpenSettingSelectDialog = false }
-            )
-        }
-        if (showGlobalExcludedTagsDialog) {
-            GlobalExcludedTagsDialog(
-                tags = localSetting.globalExcludedTags,
-                onConfirm = { tags ->
-                    localSettingManager.updateGlobalExcludedTags(tags)
-                    showGlobalExcludedTagsDialog = false
-                },
-                onDismiss = { showGlobalExcludedTagsDialog = false }
             )
         }
     }
@@ -489,81 +463,6 @@ private fun AllGridColumnSliderDialog(
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun GlobalExcludedTagsDialog(
-    tags: List<String>,
-    onConfirm: (List<String>) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var text by remember { mutableStateOf("") }
-    var currentTags by remember { mutableStateOf(tags) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("全局排除标签") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "添加标签后，所有作品列表都不会显示包含这些标签的漫画",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = { Text("输入标签名") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                val trimmed = text.trim()
-                                if (trimmed.isNotEmpty() && currentTags.none { it.equals(trimmed, ignoreCase = true) }) {
-                                    currentTags = currentTags + trimmed
-                                    text = ""
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Rounded.Add, contentDescription = "添加")
-                        }
-                    }
-                )
-                if (currentTags.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        currentTags.forEach { tag ->
-                            InputChip(
-                                label = { Text(tag) },
-                                selected = false,
-                                onClick = {},
-                                trailingIcon = {
-                                    Icon(
-                                        Icons.Rounded.Close,
-                                        contentDescription = "删除",
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clickable {
-                                                currentTags = currentTags - tag
-                                            }
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(currentTags) }) { Text("确定") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
-    )
-}
 
 @Composable
 private fun SettingsSection(

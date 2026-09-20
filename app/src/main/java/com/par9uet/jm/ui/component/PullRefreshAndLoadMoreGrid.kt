@@ -42,6 +42,7 @@ fun <T : Any> PullRefreshAndLoadMoreGrid(
     itemContent: @Composable ((item: T) -> Unit),
 ) {
     val isRefreshing = lazyPagingItems.loadState.refresh is LoadState.Loading
+    val showInitialLoading = header != null && lazyPagingItems.itemCount == 0 && isRefreshing
     val gridContent: @Composable () -> Unit = {
         LazyVerticalGrid(
             modifier = Modifier.fillMaxSize(),
@@ -53,7 +54,7 @@ fun <T : Any> PullRefreshAndLoadMoreGrid(
         ) {
             if (header != null) {
                 item(key = "grid-header", span = { GridItemSpan(maxLineSpan) }) { header() }
-                if (lazyPagingItems.itemCount == 0 && isRefreshing) {
+                if (showInitialLoading) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
@@ -79,7 +80,8 @@ fun <T : Any> PullRefreshAndLoadMoreGrid(
                     itemContent(item)
                 }
             }
-            when (val appendState = lazyPagingItems.loadState.append) {
+            when (val appendState = if (isRefreshing) null else lazyPagingItems.loadState.append) {
+                null -> Unit
                 is LoadState.Loading -> {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(
@@ -132,7 +134,7 @@ fun <T : Any> PullRefreshAndLoadMoreGrid(
     }
     if (enablePullRefresh) {
         PullToRefreshBox(
-            isRefreshing = isRefreshing,
+            isRefreshing = isRefreshing && !showInitialLoading,
             onRefresh = {
                 lazyPagingItems.refresh()
             },

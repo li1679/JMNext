@@ -170,15 +170,6 @@ class LocalSettingManager(
     fun updateSearchGridColumns(columns: Int) =
         updateSetting { it.copy(searchGridColumns = columns.coerceIn(0, 6)) }
 
-    fun updateGlobalExcludedTags(tags: List<String>) {
-        val normalized = normalizeBlockedTagList(tags)
-        updateSetting {
-            it.copy(
-                globalExcludedTags = normalized,
-            )
-        }
-    }
-
     fun updateReadDecodeConcurrency(concurrency: Int) =
         updateSetting { it.copy(readDecodeConcurrency = concurrency.coerceIn(1, 4)) }
 

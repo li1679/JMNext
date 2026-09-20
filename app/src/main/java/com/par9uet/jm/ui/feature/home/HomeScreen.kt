@@ -71,8 +71,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.par9uet.jm.data.network.model.NetWorkResult
-import androidx.compose.runtime.produceState
 import com.par9uet.jm.core.designsystem.component.TabSkeleton
 import com.par9uet.jm.data.storage.LocalSettingManager
 import com.par9uet.jm.domain.store.UserManager
@@ -231,7 +229,6 @@ fun HomeScreen(
                             columns = adaptiveComicGridCells(localSetting.homeGridColumns),
                             comicList = emptyList(),
                             isLoading = homeComicState.isLoading,
-                            hasExcludedTags = false,
                             error = if (homeComicState.isError) homeComicState.errorMsg ?: "加载失败" else null,
                             onRetry = comicViewModel::refreshHomeComic,
                         )
@@ -252,32 +249,17 @@ fun HomeScreen(
                                 },
                             ) { page ->
                                 val category = categories[page]
-                                var retry by remember(category) { mutableIntStateOf(0) }
-                                val tags = localSetting.globalExcludedTags
-                                // A new rule must not briefly display items approved by the old rule.
-                                key(category, tags) {
-                                    val filtered by produceState<NetWorkResult<List<com.par9uet.jm.core.model.Comic>>?>(
-                                        initialValue = null, category, tags, retry,
-                                    ) {
-                                        value = null
-                                        value = comicViewModel.filterHomeComics(category.list, tags)
-                                    }
-                                    gridStates.SaveableStateProvider(category.id) {
-                                        Column {
-                                            category.errorMessage?.let { message ->
-                                                Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
-                                                Button(onClick = comicViewModel::refreshHomeComic) { Text("重试") }
-                                            }
-                                            HomeComicGrid(
-                                                scrollToTopEnabled = page == pagerState.currentPage,
-                                                columns = adaptiveComicGridCells(localSetting.homeGridColumns),
-                                                comicList = (filtered as? NetWorkResult.Success)?.data.orEmpty(),
-                                                isLoading = filtered == null,
-                                                hasExcludedTags = tags.isNotEmpty(),
-                                                error = (filtered as? NetWorkResult.Error)?.message,
-                                                onRetry = { retry++ },
-                                            )
+                                gridStates.SaveableStateProvider(category.id) {
+                                    Column {
+                                        category.errorMessage?.let { message ->
+                                            Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+                                            Button(onClick = comicViewModel::refreshHomeComic) { Text("重试") }
                                         }
+                                        HomeComicGrid(
+                                            scrollToTopEnabled = page == pagerState.currentPage,
+                                            columns = adaptiveComicGridCells(localSetting.homeGridColumns),
+                                            comicList = category.list,
+                                        )
                                     }
                                 }
                             }
@@ -331,8 +313,7 @@ private fun HomeLayout(
 private fun HomeComicGrid(
     columns: GridCells,
     comicList: List<com.par9uet.jm.core.model.Comic>,
-    isLoading: Boolean,
-    hasExcludedTags: Boolean,
+    isLoading: Boolean = false,
     error: String? = null,
     onRetry: () -> Unit = {},
     scrollToTopEnabled: Boolean = true,
@@ -382,17 +363,10 @@ private fun HomeComicGrid(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                     )
                     Text(
-                        text = if (hasExcludedTags) "当前分类的漫画均被标签排除过滤" else "暂无漫画",
+                        text = "暂无漫画",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (hasExcludedTags) {
-                        Text(
-                            text = "可在 设置 → 标签排除 中调整",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
                 }
             }
         }

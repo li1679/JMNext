@@ -25,7 +25,7 @@ import org.junit.Test
 
 class SearchComicPagingSourceTest {
     @Test
-    fun filtersSingleExcludedTagUsingDetailsAndKeepsServerPagination() = runTest {
+    fun filtersSingleKnownTagAndKeepsServerPagination() = runTest {
         val repository = FakeComicRepository()
         val source = SearchComicPagingSource(repository, SearchComicFilter(excludedTags = listOf("a")))
         val result = source.load(PagingSource.LoadParams.Refresh(null, 60, false)) as PagingSource.LoadResult.Page
@@ -34,7 +34,7 @@ class SearchComicPagingSourceTest {
     }
 
     @Test
-    fun filtersMultipleExcludedTagsByDetail() = runTest {
+    fun filtersMultipleKnownTags() = runTest {
         val repository = FakeComicRepository()
         val source = SearchComicPagingSource(
             comicRepository = repository,
@@ -83,12 +83,7 @@ class SearchComicPagingSourceTest {
         }
 
         override suspend fun getComicDetail(id: Int): NetWorkResult<ComicDetailResponse> {
-            return NetWorkResult.Success(
-                detail(
-                    id = id,
-                    tags = if (id == 1) listOf("a") else listOf("c")
-                )
-            )
+            error("List filtering must not request details")
         }
 
         override suspend fun likeComic(id: Int): NetWorkResult<LikeComicResponse> = unused()
@@ -142,28 +137,7 @@ class SearchComicPagingSourceTest {
                 liked = false,
                 is_favorite = false,
                 update_at = 0,
-                tags = null
-            )
-        }
-
-        private fun detail(id: Int, tags: List<String>): ComicDetailResponse {
-            return ComicDetailResponse(
-                id = id,
-                name = "comic $id",
-                description = "",
-                author = listOf("author"),
-                total_views = 0,
-                likes = 0,
-                comment_total = 0,
-                tags = tags,
-                actors = emptyList(),
-                works = emptyList(),
-                is_favorite = false,
-                liked = false,
-                series = emptyList(),
-                series_id = "",
-                price = "0",
-                purchased = false
+                tags = if (id == 1) listOf("a") else null
             )
         }
 

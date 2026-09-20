@@ -229,14 +229,12 @@ fun ComicReadScreen(
             if (localSetting.readMode == "scroll") {
                 ComicScrollRead(
                     lazyListState = lazyListState,
-                    pagerState = pagerState,
                     targetIndex = targetIndex,
                     zoomState = zoomState,
                     onUpdateSliderValue = { updateIndexFromReader(it) }
                 )
             } else {
                 ComicPageRead(
-                    lazyListState = lazyListState,
                     pagerState = pagerState,
                     targetIndex = targetIndex,
                     zoomState = zoomState,

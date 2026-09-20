@@ -10,21 +10,18 @@ import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.core.model.SignInData
 import com.par9uet.jm.core.model.TagFilterLogic
 import com.par9uet.jm.data.repository.ComicRepository
-import com.par9uet.jm.data.repository.ComicTagFilter
 import com.par9uet.jm.data.repository.UserRepository
 import com.par9uet.jm.data.network.model.LoginResponse
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.network.model.SignInDataResponse
 import com.par9uet.jm.data.network.model.SignInResponse
 import com.par9uet.jm.domain.store.DownloadManager
-import com.par9uet.jm.data.storage.LocalSettingManager
 import com.par9uet.jm.core.common.ToastManager
 import com.par9uet.jm.domain.store.UserManager
 import com.par9uet.jm.core.model.CommonUIState
 import com.par9uet.jm.ui.feature.user.CollectComicPagingSource
 import com.par9uet.jm.ui.feature.user.HistoryComicPagingSource
 import com.par9uet.jm.ui.feature.user.HistoryCommentPagingSource
-import com.par9uet.jm.core.common.filterBlockedTags
 import com.par9uet.jm.core.common.log
 import com.par9uet.jm.core.common.logError
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -56,7 +53,6 @@ data class HistoryEditState(
 
 private data class CollectPagerKey(
     val order: CollectComicOrderFilter,
-    val blockedTagList: List<String>,
     val filter: CollectComicLocalFilter,
     val folderId: Int
 )
@@ -65,10 +61,8 @@ class UserViewModel(
     private val userManager: UserManager,
     private val userRepository: UserRepository,
     private val toastManager: ToastManager,
-    private val localSettingManager: LocalSettingManager,
     private val comicRepository: ComicRepository,
     private val downloadManager: DownloadManager,
-    private val tagFilter: ComicTagFilter,
 ) : ViewModel() {
 
     /**
@@ -150,12 +144,11 @@ class UserViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val collectComicPager = combine(
-        localSettingManager.localSettingState,
         _collectComicFilter,
         _selectedFolderId,
         currentUserId
-    ) { localSetting, filter, folderId, _ ->
-        CollectPagerKey(CollectComicOrderFilter.COLLECT_TIME, localSetting.globalExcludedTags, filter, folderId)
+    ) { filter, folderId, _ ->
+        CollectPagerKey(CollectComicOrderFilter.COLLECT_TIME, filter, folderId)
     }.flatMapLatest { key ->
         Pager(
             config = PagingConfig(pageSize = 20, prefetchDistance = 6, initialLoadSize = 20),
@@ -163,13 +156,11 @@ class UserViewModel(
                 CollectComicPagingSource(
                     userRepository,
                     key.order,
-                    key.blockedTagList,
                     key.filter.searchText,
                     key.filter.selectedTags,
                     key.filter.selectedAuthors,
                     key.folderId,
                     key.filter.tagLogic,
-                    tagFilter,
                 )
             }
         ).flow
@@ -318,7 +309,6 @@ class UserViewModel(
 
     fun refreshCollectTagCounts() {
         viewModelScope.launch {
-            val blockedTagList = localSettingManager.localSettingState.value.globalExcludedTags
             val order = CollectComicOrderFilter.COLLECT_TIME
             val folderId = _selectedFolderId.value
             val tagCounts = mutableMapOf<String, Int>()
@@ -334,12 +324,7 @@ class UserViewModel(
                     }
 
                     is NetWorkResult.Success -> {
-                        val filtered = tagFilter.filter(data.data.toComicList(), blockedTagList)
-                        if (filtered is NetWorkResult.Error) {
-                            toastManager.showAsync(filtered.message)
-                            return@launch
-                        }
-                        val comics = (filtered as NetWorkResult.Success).data
+                        val comics = data.data.toComicList()
                         comics.flatMap { it.tagList }.forEach { tag ->
                             tagCounts[tag] = (tagCounts[tag] ?: 0) + 1
                         }
@@ -379,18 +364,15 @@ class UserViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val historyComicPager = combine(
-        localSettingManager.localSettingState,
         _historyRefreshVersion,
         currentUserId
-    ) { localSetting, _, _ -> localSetting }
-        .flatMapLatest { localSetting ->
+    ) { version, userId -> version to userId }
+        .flatMapLatest {
         Pager(
             config = PagingConfig(pageSize = 20, prefetchDistance = 6, initialLoadSize = 20),
             pagingSourceFactory = {
                 HistoryComicPagingSource(
                     userRepository,
-                    localSetting.globalExcludedTags,
-                    tagFilter,
                 )
             }
         ).flow

@@ -14,13 +14,13 @@ import org.koin.dsl.module
 
 /** 界面层只注册 ViewModel，其余对象由各自模块注册，在 JmApplication 汇总。 */
 val appModule = module {
-    viewModel { CategoryViewModel(get(), get(), get()) }
+    viewModel { CategoryViewModel(get()) }
     viewModel { GlobalViewModel(getAll(), get()) }
-    viewModel { ComicViewModel(get(), get(), get()) }
+    viewModel { ComicViewModel(get(), get()) }
     viewModel { ComicDetailViewModel(get(), get(), get(), get(), get()) }
     viewModel { ComicReadViewModel(get(), get(), get(), get(), get(), get()) }
-    viewModel { UserViewModel(get(), get(), get(), get(), get(), get(), get()) }
-    viewModel { DownloadViewModel(get(), get(), get()) }
+    viewModel { UserViewModel(get(), get(), get(), get(), get()) }
+    viewModel { DownloadViewModel(get(), get()) }
     viewModel { DownloadComicDetailViewModel(get()) }
     viewModel { CheckUpdateViewModel(get()) }
 }

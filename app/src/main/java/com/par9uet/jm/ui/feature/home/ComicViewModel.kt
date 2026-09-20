@@ -13,7 +13,6 @@ import com.par9uet.jm.data.repository.ComicTagFilter
 import com.par9uet.jm.data.network.model.HomeSwiperComicListItemResponse
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.network.model.WeekResponse
-import com.par9uet.jm.data.storage.LocalSettingManager
 import com.par9uet.jm.core.model.CommonUIState
 import com.par9uet.jm.ui.feature.search.SearchComicFilter
 import com.par9uet.jm.ui.feature.search.SearchComicPagingSource
@@ -22,18 +21,14 @@ import com.par9uet.jm.ui.feature.home.WeekFilter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ComicViewModel(
     private val comicRepository: ComicRepository,
-    private val localSettingManager: LocalSettingManager,
     private val tagFilter: ComicTagFilter,
 ) : ViewModel() {
     data class HomeComicUIState(
@@ -49,9 +44,6 @@ class ComicViewModel(
     /** 已成功加载过首页数据后避免重复请求 */
     private var homeLoaded = false
     private var homeJob: Job? = null
-
-    suspend fun filterHomeComics(comics: List<com.par9uet.jm.core.model.Comic>, tags: List<String>) =
-        tagFilter.filter(comics, tags)
 
     /**
      * 按需加载。首页是 Tab 页，导航返回时 NavHost 会重建 composable 并重跑 LaunchedEffect，
@@ -114,11 +106,7 @@ class ComicViewModel(
     val searchComicIdState = _searchComicIdState.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val searchComicPager = combine(
-        _searchComicFilterState,
-        localSettingManager.localSettingState.map { it.globalExcludedTags }.distinctUntilChanged()
-    ) { filter, tags -> filter to tags }
-        .flatMapLatest { (filter, blockedTagList) ->
+    val searchComicPager = _searchComicFilterState.flatMapLatest { filter ->
         Pager(
             config = PagingConfig(
                 pageSize = 20,
@@ -128,7 +116,7 @@ class ComicViewModel(
             pagingSourceFactory = {
                 SearchComicPagingSource(
                     comicRepository,
-                    filter.copy(excludedTags = (filter.excludedTags + blockedTagList).distinct()),
+                    filter,
                     tagFilter,
                 ) { id ->
                     _searchComicIdState.update {
@@ -227,13 +215,7 @@ class ComicViewModel(
     val weekFilterState = _weekFilterState.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val weekComicPager = combine(
-        _weekFilterState,
-        localSettingManager.localSettingState.map { it.globalExcludedTags }.distinctUntilChanged()
-    ) { filter, tags ->
-        filter to tags
-    }
-        .flatMapLatest { (filter, blockedTagList) ->
+    val weekComicPager = _weekFilterState.flatMapLatest { filter ->
         Pager(
             config = PagingConfig(
                 pageSize = 20,
@@ -244,8 +226,6 @@ class ComicViewModel(
                 WeekComicPagingSource(
                     comicRepository,
                     filter,
-                    blockedTagList,
-                    tagFilter,
                 )
             }
         ).flow

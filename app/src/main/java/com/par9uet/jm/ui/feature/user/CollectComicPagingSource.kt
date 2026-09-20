@@ -6,21 +6,17 @@ import com.par9uet.jm.core.model.CollectComicOrderFilter
 import com.par9uet.jm.core.model.Comic
 import com.par9uet.jm.core.model.TagFilterLogic
 import com.par9uet.jm.data.repository.UserRepository
-import com.par9uet.jm.data.repository.ComicTagFilter
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.network.model.UserCollectComicListResponse
-import com.par9uet.jm.core.common.filterBlockedTags
 
 class CollectComicPagingSource(
     private val userRepository: UserRepository,
     private val order: CollectComicOrderFilter,
-    private val blockedTagList: List<String> = listOf(),
     private val searchText: String = "",
     private val selectedTags: Set<String> = emptySet(),
     private val selectedAuthors: Set<String> = emptySet(),
     private val folderId: Int = 0,
     private val tagLogic: TagFilterLogic = TagFilterLogic.AND,
-    private val tagFilter: ComicTagFilter,
 ) : PagingSource<Int, Comic>() {
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Comic> {
         val currentPage = params.key ?: 1
@@ -34,9 +30,7 @@ class CollectComicPagingSource(
                 val query = searchText.trim()
                 val lowerSelectedTags = selectedTags.map { it.lowercase().trim() }.filter { it.isNotBlank() }.toSet()
                 val lowerSelectedAuthors = selectedAuthors.map { it.lowercase().trim() }.filter { it.isNotBlank() }.toSet()
-                val filtered = tagFilter.filter(data.data.toComicList(), blockedTagList)
-                if (filtered is NetWorkResult.Error) return LoadResult.Error(IllegalStateException(filtered.message))
-                val list = (filtered as NetWorkResult.Success).data
+                val list = data.data.toComicList()
                     .filter { comic ->
                         // 顶部搜索支持按漫画名、作者或标签匹配
                         query.isBlank() ||

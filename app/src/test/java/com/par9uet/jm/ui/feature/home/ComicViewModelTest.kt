@@ -1,18 +1,14 @@
 package com.par9uet.jm.ui.feature.home
 
-import com.par9uet.jm.core.model.LocalSetting
 import com.par9uet.jm.data.network.model.HomeSwiperComicListItemResponse
 import com.par9uet.jm.data.network.model.NetWorkResult
 import com.par9uet.jm.data.repository.ComicRepository
 import com.par9uet.jm.data.repository.ComicTagFilter
-import com.par9uet.jm.data.storage.LocalSettingManager
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -23,11 +19,9 @@ class ComicViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val repository = mockk<ComicRepository>()
-            val settings = mockk<LocalSettingManager>()
-            every { settings.localSettingState } returns MutableStateFlow(LocalSetting())
             val first = CompletableDeferred<NetWorkResult<List<HomeSwiperComicListItemResponse>>>()
             coEvery { repository.getHomeSwiperComicList() } coAnswers { first.await() }
-            val model = ComicViewModel(repository, settings, ComicTagFilter(repository))
+            val model = ComicViewModel(repository, ComicTagFilter())
             model.ensureHomeComic()
             model.refreshHomeComic()
             runCurrent()

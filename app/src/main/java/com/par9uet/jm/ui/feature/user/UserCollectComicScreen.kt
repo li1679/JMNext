@@ -62,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -172,7 +173,14 @@ fun UserCollectComicScreen(
                     value = collectComicFilter.searchText,
                     onValueChange = { userViewModel.updateCollectSearchText(it) },
                     singleLine = true,
-                    placeholder = { Text("搜索漫画名 / 作者 / 标签") },
+                    placeholder = {
+                        Text(
+                            text = "搜索漫画名 / 作者 / 标签",
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
                     leadingIcon = {
                         Icon(Icons.Rounded.Search, contentDescription = null)
                     },

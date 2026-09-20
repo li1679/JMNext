@@ -4,7 +4,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -13,8 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -26,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import com.par9uet.jm.ui.component.ComicPicImage
 import com.par9uet.jm.ui.feature.reader.ComicReadViewModel
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.filterNot
 import org.koin.androidx.compose.koinViewModel
 
 // 过短（如 60ms）时 animateScrollToPage 近似硬切，反而被感知成卡顿
@@ -35,7 +33,6 @@ private const val CLICK_PAGE_TURN_ANIMATION_MS = 180
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComicPageRead(
-    lazyListState: LazyListState,
     pagerState: PagerState,
     targetIndex: Int,
     zoomState: ReaderZoomState,
@@ -47,7 +44,7 @@ fun ComicPageRead(
     val comicPicState by comicReadViewModel.comicPicState.collectAsStateWithLifecycle()
     val list = comicPicState.data ?: listOf()
     val context = LocalContext.current
-    var isProgrammaticScroll by remember { mutableStateOf(false) }
+    val updateSlider by rememberUpdatedState(onUpdateSliderValue)
     var clickTargetIndex by remember { mutableIntStateOf(-1) }
 
     // 点击翻页：等待 animateScrollToPage 动画完成后再更新状态
@@ -62,25 +59,21 @@ fun ComicPageRead(
             clickTargetIndex = -1
             return@LaunchedEffect
         }
-        isProgrammaticScroll = true
-        pagerState.animateScrollToPage(
-            page = target,
-            animationSpec = tween(durationMillis = CLICK_PAGE_TURN_ANIMATION_MS)
-        )
-        currentIndexState = target
-        onUpdateSliderValue(target.toFloat())
-        comicReadViewModel.decodeIndex(target, context)
-        isProgrammaticScroll = false
-        clickTargetIndex = -1
+        try {
+            pagerState.animateScrollToPage(
+                page = target,
+                animationSpec = tween(durationMillis = CLICK_PAGE_TURN_ANIMATION_MS)
+            )
+        } finally {
+            clickTargetIndex = -1
+        }
     }
 
     LaunchedEffect(targetIndex, list.size) {
         if (list.isEmpty()) return@LaunchedEffect
         val target = targetIndex.coerceIn(0, list.lastIndex)
         if (target == pagerState.currentPage) return@LaunchedEffect
-        isProgrammaticScroll = true
         pagerState.animateScrollToPage(target)
-        isProgrammaticScroll = false
     }
 
     LaunchedEffect(pagerState) {
@@ -93,11 +86,10 @@ fun ComicPageRead(
 
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }
-            .filterNot { isProgrammaticScroll }
             .collect { newPage ->
                 if (newPage != currentIndexState) {
+                    updateSlider(newPage.toFloat())
                     currentIndexState = newPage
-                    onUpdateSliderValue(newPage.toFloat())
                     comicReadViewModel.decodeIndex(newPage, context)
                 }
             }

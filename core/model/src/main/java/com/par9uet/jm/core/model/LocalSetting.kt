@@ -60,9 +60,6 @@ data class LocalSetting(
     // 阅读图片内存优化：开启后限制并发解码数并降低解码采样率，缓解低端设备 OOM
     // 阅读并发解码上限，推荐值 2
     val readDecodeConcurrency: Int = 2,
-    // 首页推荐排除标签：带有这些标签的漫画不会出现在首页推荐中
-    // 全局排除标签：所有作品列表均不显示包含这些标签的漫画
-    val globalExcludedTags: List<String> = listOf(),
 )
 
 const val COLOR_PALETTE_PRESET_DEFAULT = "default"

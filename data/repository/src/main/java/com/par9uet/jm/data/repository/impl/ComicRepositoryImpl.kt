@@ -237,7 +237,8 @@ class ComicRepositoryImpl(
                                     ),
                                     liked = false,
                                     is_favorite = false,
-                                    update_at = 0
+                                    update_at = 0,
+                                    tags = albumMeta.tags().orEmpty(),
                                 )
                             }
                         )

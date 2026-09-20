@@ -8,8 +8,7 @@ import androidx.paging.cachedIn
 import com.par9uet.jm.data.database.dao.DownloadComicDao
 import com.par9uet.jm.data.database.model.DownloadComic
 import com.par9uet.jm.domain.store.DownloadManager
-import com.par9uet.jm.data.storage.LocalSettingManager
-import com.par9uet.jm.core.common.normalizeBlockedTagList
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -46,7 +45,6 @@ data class DownloadComicGroup(
 class DownloadViewModel(
     private val downloadComicDao: DownloadComicDao,
     private val downloadManager: DownloadManager,
-    private val localSettingManager: LocalSettingManager,
 ) : ViewModel() {
     private val _downloadFilterState = MutableStateFlow(DownloadFilter("downloading"))
     val downloadFilterState = _downloadFilterState.asStateFlow()
@@ -63,26 +61,15 @@ class DownloadViewModel(
     val errorList = downloadComicDao.observeErrorList()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val completeGroups = combine(
-        downloadComicDao.observeCompleteList(),
-        localSettingManager.localSettingState
-    ) { items, setting ->
-        groupDownloads(items).filterNot { it.tagList.isBlockedBy(setting.globalExcludedTags) }
-    }
+    val completeGroups = downloadComicDao.observeCompleteList().map(::groupDownloads)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val activeGroups = combine(activeList, completeList, localSettingManager.localSettingState) { activeItems, completeItems, setting ->
+    val activeGroups = combine(activeList, completeList) { activeItems, completeItems ->
         groupActiveDownloads(activeItems, completeItems)
-            .filterNot { it.tagList.isBlockedBy(setting.globalExcludedTags) }
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val errorGroups = combine(
-        downloadComicDao.observeErrorList(),
-        localSettingManager.localSettingState
-    ) { items, setting ->
-        groupDownloads(items).filterNot { it.tagList.isBlockedBy(setting.globalExcludedTags) }
-    }
+    val errorGroups = downloadComicDao.observeErrorList().map(::groupDownloads)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun updateDownloadStatusFilter(status: String) {
@@ -229,11 +216,6 @@ private fun groupDownloads(items: List<DownloadComic>): List<DownloadComicGroup>
             )
         }
         .sortedByDescending { it.latestTime }
-}
-
-private fun List<String>.isBlockedBy(blockedTags: List<String>): Boolean {
-    val blocked = normalizeBlockedTagList(blockedTags).map { it.lowercase() }.toSet()
-    return isNotEmpty() && any { it.trim().lowercase() in blocked }
 }
 
 private fun groupActiveDownloads(
